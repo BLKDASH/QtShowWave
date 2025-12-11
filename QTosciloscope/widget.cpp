@@ -270,7 +270,8 @@ void Widget::onSerialError(const QString &error)
  */
 void Widget::showSystemMessage(const QString &message)
 {
-    ui->receiveEdit->appendPlainText("SysInfo >> " + message);
+    ui->receiveEdit->insertPlainText("SysInfo >> " + message + "\r\n");
+    ui->receiveEdit->moveCursor(QTextCursor::End);
 }
 
 /**
@@ -284,7 +285,7 @@ void Widget::onSerialStarted()
     ui->open->setStyleSheet("color: orange;");
     ui->lbConnected->setText("当前已连接");
     ui->lbConnected->setStyleSheet("color: green;");
-    showSystemMessage("串口已连接！\n");
+    showSystemMessage("串口已连接！");
 
     // Save last used port name - Requirements: 6.4
     AppSettings::instance()->setLastPortName(ui->cbPortName->currentText());
@@ -310,7 +311,7 @@ void Widget::onSerialStopped()
     ui->open->setStyleSheet("color: red;");
     ui->lbConnected->setText("当前未连接");
     ui->lbConnected->setStyleSheet("color: rgb(0, 85, 255);");
-    showSystemMessage("串口已关闭！\n");
+    showSystemMessage("串口已关闭！");
 }
 
 /**
@@ -344,7 +345,7 @@ void Widget::on_clear_clicked()
 void Widget::on_cbPortName_clicked()
 {
     updatePortList();
-    showSystemMessage("检测端口完毕\n");
+    showSystemMessage("检测端口完毕");
 }
 
 /**
@@ -474,6 +475,14 @@ void Widget::on_openSetButton_clicked()
     buttonLayout->addWidget(confirmButton);
     buttonLayout->addStretch();
     mainLayout->addLayout(buttonLayout);
+
+    // Copyright label
+    QLabel *copyrightLabel = new QLabel("© 2025 tubohu-广工电子科技协会嵌入式组. All rights reserved.", settingsDialog);
+    copyrightLabel->setAlignment(Qt::AlignCenter);
+    QFont copyrightFont = copyrightLabel->font();
+    copyrightFont.setPointSize(7);
+    copyrightLabel->setFont(copyrightFont);
+    mainLayout->addWidget(copyrightLabel);
 
     // Load current values from AppSettings - Requirements: 4.2
     AppSettings *settings = AppSettings::instance();

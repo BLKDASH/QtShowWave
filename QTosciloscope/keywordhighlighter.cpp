@@ -7,6 +7,7 @@
  * - info: 蓝色 (#0066CC)
  * - warning: 橙色 (#FF9900)
  * - error: 红色 (#CC0000)
+ * - sysinfo: 绿色 (#00AA00)
  * 
  * 所有规则使用大小写不敏感匹配。
  * Requirements: 3.2, 3.5
@@ -39,6 +40,21 @@ KeywordHighlighter::KeywordHighlighter(QTextDocument *parent)
     rule.pattern = QRegularExpression(QStringLiteral("\\berror\\b"),
                                       QRegularExpression::CaseInsensitiveOption);
     rule.format = errorFormat;
+    m_rules.append(rule);
+
+    // sysinfo 关键词 - 绿色
+    QTextCharFormat sysinfoFormat;
+    sysinfoFormat.setForeground(QColor("#00AA00"));
+    rule.pattern = QRegularExpression(QStringLiteral("\\bsysinfo\\b"),
+                                      QRegularExpression::CaseInsensitiveOption);
+    rule.format = sysinfoFormat;
+    m_rules.append(rule);
+
+    // 时间戳 - 灰色 (格式: HH:mm:ss.zzz >>)
+    QTextCharFormat timestampFormat;
+    timestampFormat.setForeground(QColor("#808080"));  // 灰色
+    rule.pattern = QRegularExpression(QStringLiteral("\\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\s*>>"));
+    rule.format = timestampFormat;
     m_rules.append(rule);
 }
 

@@ -4,6 +4,7 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
 CONFIG += c++17
 
+TARGET = SSW_SerialHelper
 
 SOURCES += \
     appsettings.cpp \

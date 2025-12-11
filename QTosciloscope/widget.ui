@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>SSWHelper-串口示波器</string>
+   <string>SSWHelper-串口助手</string>
   </property>
   <property name="windowIcon">
    <iconset resource="rec.qrc">
