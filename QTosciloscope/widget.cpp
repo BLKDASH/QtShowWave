@@ -29,6 +29,7 @@ Widget::Widget(QWidget *parent)
     , m_buffer(new DataBuffer(65536, this))
     , m_refreshTimer(new QTimer(this))
     , m_highlighter(nullptr)
+    , m_speedMonitor(new SpeedMonitor(this))
     , m_autoScroll(true)
 {
     ui->setupUi(this);
@@ -118,6 +119,8 @@ void Widget::setupConnections()
 
     QScrollBar *scrollBar = ui->receiveEdit->verticalScrollBar();
     connect(scrollBar, &QScrollBar::valueChanged, this, &Widget::onScrollValueChanged);
+
+    connect(m_speedMonitor, &SpeedMonitor::speedUpdated, this, &Widget::onSpeedUpdated);
 }
 
 
@@ -231,6 +234,7 @@ void Widget::onRefreshTimeout()
 void Widget::onDataReceived(const QByteArray &data)
 {
     m_buffer->write(data);
+    m_speedMonitor->recordBytes(data.size());
 
     m_processor->setFormat(ui->chk0x16Show->isChecked() 
         ? DataProcessor::Hexadecimal 
@@ -290,6 +294,10 @@ void Widget::onSerialStarted()
     // Save last used port name - Requirements: 6.4
     AppSettings::instance()->setLastPortName(ui->cbPortName->currentText());
 
+    // Start speed monitoring - Requirements: 1.3, 3.2
+    m_speedMonitor->reset();
+    m_speedMonitor->start();
+
     m_refreshTimer->start();
 }
 
@@ -299,6 +307,10 @@ void Widget::onSerialStarted()
 void Widget::onSerialStopped()
 {
     m_refreshTimer->stop();
+
+    // Stop speed monitoring - Requirements: 1.3
+    m_speedMonitor->stop();
+    ui->groupBox_2->setTitle("接收区");
 
     if (!m_pendingText.isEmpty()) {
         appendToDisplay(m_pendingText);
@@ -312,6 +324,23 @@ void Widget::onSerialStopped()
     ui->lbConnected->setText("当前未连接");
     ui->lbConnected->setStyleSheet("color: rgb(0, 85, 255);");
     showSystemMessage("串口已关闭！");
+}
+
+/**
+ * @brief 速度更新回调
+ * 
+ * 更新接收区标题显示当前速度和累计字节数。
+ * Requirements: 1.1, 1.2, 3.4
+ * 
+ * @param bytesPerSecond 当前速度（bytes/s）
+ * @param totalBytes 累计总字节数
+ */
+void Widget::onSpeedUpdated(double bytesPerSecond, qint64 totalBytes)
+{
+    QString title = QString("接收区 [%1 | 总计: %2]")
+        .arg(SpeedMonitor::formatSpeed(bytesPerSecond))
+        .arg(SpeedMonitor::formatBytes(totalBytes));
+    ui->groupBox_2->setTitle(title);
 }
 
 /**
@@ -337,6 +366,9 @@ void Widget::on_clear_clicked()
     ui->receiveEdit->clear();
     m_pendingText.clear();
     m_buffer->clear();
+    
+    // Reset speed monitor counters - Requirements: 3.3
+    m_speedMonitor->reset();
 }
 
 /**

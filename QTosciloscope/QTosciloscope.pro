@@ -14,6 +14,7 @@ SOURCES += \
     main.cpp \
     mycombobox.cpp \
     serialworker.cpp \
+    speedmonitor.cpp \
     widget.cpp
 
 HEADERS += \
@@ -24,6 +25,7 @@ HEADERS += \
     mycombobox.h \
     serialconfig.h \
     serialworker.h \
+    speedmonitor.h \
     widget.h
 
 FORMS += \

@@ -10,6 +10,7 @@
 #include "databuffer.h"
 #include "serialconfig.h"
 #include "keywordhighlighter.h"
+#include "speedmonitor.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class Widget; }
@@ -47,6 +48,7 @@ private slots:
     void onSerialStarted();
     void onSerialStopped();
     void onScrollValueChanged(int value);
+    void onSpeedUpdated(double bytesPerSecond, qint64 totalBytes);
 
     void on_openSetButton_clicked();
 
@@ -64,6 +66,7 @@ private:
     DataBuffer *m_buffer;
     QTimer *m_refreshTimer;
     KeywordHighlighter *m_highlighter;
+    SpeedMonitor *m_speedMonitor;
     QString m_pendingText;
     bool m_autoScroll = true;
 };
