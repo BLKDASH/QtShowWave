@@ -6,16 +6,20 @@ CONFIG += c++17
 
 
 SOURCES += \
+    appsettings.cpp \
     databuffer.cpp \
     dataprocessor.cpp \
+    keywordhighlighter.cpp \
     main.cpp \
     mycombobox.cpp \
     serialworker.cpp \
     widget.cpp
 
 HEADERS += \
+    appsettings.h \
     databuffer.h \
     dataprocessor.h \
+    keywordhighlighter.h \
     mycombobox.h \
     serialconfig.h \
     serialworker.h \

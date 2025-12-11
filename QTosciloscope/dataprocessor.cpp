@@ -1,4 +1,5 @@
 #include "dataprocessor.h"
+#include <QStringDecoder>
 
 /**
  * @brief DataProcessor 实现
@@ -10,6 +11,8 @@ DataProcessor::DataProcessor(QObject *parent)
     : QObject(parent)
     , m_format(ASCII)
     , m_timestampEnabled(false)
+    , m_encoding(AppSettings::ANSI)
+    , m_hexNewlineEnabled(true)
 {
 }
 
@@ -31,6 +34,26 @@ void DataProcessor::setTimestampEnabled(bool enabled)
 bool DataProcessor::isTimestampEnabled() const
 {
     return m_timestampEnabled;
+}
+
+void DataProcessor::setEncoding(AppSettings::Encoding encoding)
+{
+    m_encoding = encoding;
+}
+
+AppSettings::Encoding DataProcessor::encoding() const
+{
+    return m_encoding;
+}
+
+void DataProcessor::setHexNewlineEnabled(bool enabled)
+{
+    m_hexNewlineEnabled = enabled;
+}
+
+bool DataProcessor::isHexNewlineEnabled() const
+{
+    return m_hexNewlineEnabled;
 }
 
 void DataProcessor::process(const QByteArray &data)
@@ -66,7 +89,9 @@ void DataProcessor::process(const QByteArray &data)
 QString DataProcessor::toHexString(const QByteArray &data) const
 {
     // 转换为大写十六进制，每字节用空格分隔
-    // 换行符(0x0A)和回车符(0x0D)单独显示并在前后添加换行
+    // 当 m_hexNewlineEnabled 为 true 时，换行符(0x0A)和回车符(0x0D)单独显示并在前后添加换行
+    // 当 m_hexNewlineEnabled 为 false 时，0x0A 和 0x0D 作为普通十六进制值显示
+    // Requirements: 2.2, 2.3
     QString result;
     result.reserve(data.size() * 4);  // 预分配空间
 
@@ -74,7 +99,9 @@ QString DataProcessor::toHexString(const QByteArray &data) const
         quint8 byte = static_cast<quint8>(data.at(i));
         
         // 处理换行符序列 (0x0D 0x0A 或单独的 0x0A 或 0x0D)
-        if (byte == 0x0A || byte == 0x0D) {
+        // Requirements: 2.2 - 当启用时插入换行
+        // Requirements: 2.3 - 当禁用时显示为普通十六进制值
+        if (m_hexNewlineEnabled && (byte == 0x0A || byte == 0x0D)) {
             if (!result.isEmpty() && !result.endsWith('\n')) {
                 result += '\n';
             }
@@ -96,7 +123,7 @@ QString DataProcessor::toHexString(const QByteArray &data) const
             controlSequence += "]\n";
             result += controlSequence;
         } else {
-            // 普通字节处理
+            // 普通字节处理（或禁用换行时的 0x0A/0x0D）
             if (!result.isEmpty() && !result.endsWith(' ') && !result.endsWith('\n')) {
                 result += ' ';
             }
@@ -114,7 +141,39 @@ QString DataProcessor::toHexString(const QByteArray &data) const
 
 QString DataProcessor::toAsciiString(const QByteArray &data) const
 {
-    // 使用 Latin1 编码转换，保留所有字节值
+    // 根据当前编码设置转换字节数据
+    // Requirements: 1.2
+    switch (m_encoding) {
+    case AppSettings::UTF8: {
+        // 使用 UTF-8 编码转换 (Qt 6 QStringDecoder)
+        auto decoder = QStringDecoder(QStringDecoder::Utf8);
+        if (decoder.isValid()) {
+            QString result = decoder(data);
+            return result;
+        }
+        break;
+    }
+    case AppSettings::GBK: {
+        // 使用 GBK 编码转换 (Qt 6 QStringDecoder)
+        auto decoder = QStringDecoder("GBK");
+        if (decoder.isValid()) {
+            QString result = decoder(data);
+            return result;
+        }
+        // GBK 可能不可用，回退到 System 编码
+        auto sysDecoder = QStringDecoder(QStringDecoder::System);
+        if (sysDecoder.isValid()) {
+            return sysDecoder(data);
+        }
+        break;
+    }
+    case AppSettings::ANSI:
+    default:
+        // 使用 Latin1 编码转换（ANSI/Windows 本地编码）
+        return QString::fromLatin1(data);
+    }
+    
+    // 回退到 Latin1
     return QString::fromLatin1(data);
 }
 

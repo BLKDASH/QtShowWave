@@ -5,6 +5,7 @@
 #include <QByteArray>
 #include <QString>
 #include <QDateTime>
+#include "appsettings.h"
 
 /**
  * @brief DataProcessor - 数据处理器
@@ -53,6 +54,32 @@ public:
      * Requirements: 3.2
      */
     void setTimestampEnabled(bool enabled);
+
+    /**
+     * @brief 设置文本编码方式
+     * @param encoding 编码方式（ANSI, UTF8, GBK）
+     * Requirements: 1.2
+     */
+    void setEncoding(AppSettings::Encoding encoding);
+
+    /**
+     * @brief 获取当前文本编码方式
+     * @return 当前编码方式
+     */
+    AppSettings::Encoding encoding() const;
+
+    /**
+     * @brief 设置十六进制显示模式下是否启用换行
+     * @param enabled true 启用换行（0A/0D 触发换行），false 禁用
+     * Requirements: 2.2, 2.3
+     */
+    void setHexNewlineEnabled(bool enabled);
+
+    /**
+     * @brief 检查十六进制换行是否启用
+     * @return true 如果十六进制换行已启用
+     */
+    bool isHexNewlineEnabled() const;
 
     /**
      * @brief 检查时间戳是否启用
@@ -120,6 +147,8 @@ private:
 
     Format m_format = ASCII;           ///< 当前显示格式
     bool m_timestampEnabled = false;   ///< 时间戳启用状态
+    AppSettings::Encoding m_encoding = AppSettings::ANSI;  ///< 文本编码方式
+    bool m_hexNewlineEnabled = true;   ///< 十六进制换行启用状态 (Requirements: 2.2, 2.3)
 };
 
 #endif // DATAPROCESSOR_H

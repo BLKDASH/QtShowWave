@@ -9,6 +9,7 @@
 #include "dataprocessor.h"
 #include "databuffer.h"
 #include "serialconfig.h"
+#include "keywordhighlighter.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class Widget; }
@@ -38,7 +39,6 @@ private slots:
     void on_open_clicked();
     void on_send_clicked();
     void on_clearSend_clicked();
-    void on_sbFontSize_valueChanged(int arg1);
 
     void onRefreshTimeout();
     void onDataReceived(const QByteArray &data);
@@ -47,6 +47,8 @@ private slots:
     void onSerialStarted();
     void onSerialStopped();
     void onScrollValueChanged(int value);
+
+    void on_openSetButton_clicked();
 
 private:
     void setupConnections();
@@ -61,6 +63,7 @@ private:
     DataProcessor *m_processor;
     DataBuffer *m_buffer;
     QTimer *m_refreshTimer;
+    KeywordHighlighter *m_highlighter;
     QString m_pendingText;
     bool m_autoScroll = true;
 };

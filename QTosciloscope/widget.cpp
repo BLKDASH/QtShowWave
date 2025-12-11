@@ -1,9 +1,19 @@
 #include "widget.h"
 #include "ui_widget.h"
+#include "appsettings.h"
+#include "keywordhighlighter.h"
 
 #include <QMessageBox>
 #include <QSerialPortInfo>
 #include <QRegularExpression>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QPushButton>
+#include <QSpinBox>
 
 /**
  * @brief Widget 构造函数
@@ -18,6 +28,7 @@ Widget::Widget(QWidget *parent)
     , m_processor(new DataProcessor(this))
     , m_buffer(new DataBuffer(65536, this))
     , m_refreshTimer(new QTimer(this))
+    , m_highlighter(nullptr)
     , m_autoScroll(true)
 {
     ui->setupUi(this);
@@ -29,10 +40,54 @@ Widget::Widget(QWidget *parent)
     sizes << 30000 << 50000;
     ui->splitter->setSizes(sizes);
 
-    ui->sbFontSize->setValue(9);
-
     updatePortList();
     setupConnections();
+
+    // Initialize AppSettings and connect signals to DataProcessor
+    // Requirements: 4.1
+    AppSettings *settings = AppSettings::instance();
+    
+    // Apply initial settings to DataProcessor
+    m_processor->setEncoding(settings->encoding());
+    m_processor->setHexNewlineEnabled(settings->hexNewlineEnabled());
+    
+    // Connect AppSettings signals to DataProcessor setters
+    connect(settings, &AppSettings::encodingChanged, 
+            m_processor, &DataProcessor::setEncoding);
+    connect(settings, &AppSettings::hexNewlineEnabledChanged, 
+            m_processor, &DataProcessor::setHexNewlineEnabled);
+
+    // Create and attach KeywordHighlighter to receiveEdit
+    // Requirements: 3.2, 3.3
+    m_highlighter = new KeywordHighlighter(ui->receiveEdit->document());
+    m_highlighter->setEnabled(settings->keywordHighlightEnabled());
+    
+    // Connect AppSettings signal to highlighter
+    connect(settings, &AppSettings::keywordHighlightEnabledChanged, 
+            m_highlighter, &KeywordHighlighter::setEnabled);
+
+    // Apply initial font size from AppSettings
+    // Requirements: 5.2
+    int fontSize = settings->fontSize();
+    QFont font;
+    font.setPointSize(fontSize);
+    ui->receiveEdit->setFont(font);
+    ui->sendEdit->setFont(font);
+    
+    // Connect fontSizeChanged signal
+    connect(settings, &AppSettings::fontSizeChanged, this, [this](int size) {
+        QFont font;
+        font.setPointSize(size);
+        ui->receiveEdit->setFont(font);
+        ui->sendEdit->setFont(font);
+    });
+
+    // Apply last used port name if available
+    // Requirements: 6.4
+    QString lastPort = settings->lastPortName();
+    if (!lastPort.isEmpty() && ui->cbPortName->findText(lastPort) >= 0) {
+        ui->cbPortName->setCurrentText(lastPort);
+    }
 
     m_refreshTimer->setTimerType(Qt::PreciseTimer);
     m_refreshTimer->setInterval(REFRESH_INTERVAL_MS);
@@ -229,7 +284,10 @@ void Widget::onSerialStarted()
     ui->open->setStyleSheet("color: orange;");
     ui->lbConnected->setText("当前已连接");
     ui->lbConnected->setStyleSheet("color: green;");
-    showSystemMessage("串口已连接！\r\n");
+    showSystemMessage("串口已连接！\n");
+
+    // Save last used port name - Requirements: 6.4
+    AppSettings::instance()->setLastPortName(ui->cbPortName->currentText());
 
     m_refreshTimer->start();
 }
@@ -252,7 +310,7 @@ void Widget::onSerialStopped()
     ui->open->setStyleSheet("color: red;");
     ui->lbConnected->setText("当前未连接");
     ui->lbConnected->setStyleSheet("color: rgb(0, 85, 255);");
-    showSystemMessage("串口已关闭！\r\n");
+    showSystemMessage("串口已关闭！\n");
 }
 
 /**
@@ -286,7 +344,7 @@ void Widget::on_clear_clicked()
 void Widget::on_cbPortName_clicked()
 {
     updatePortList();
-    showSystemMessage("检测端口完毕\r\n");
+    showSystemMessage("检测端口完毕\n");
 }
 
 /**
@@ -360,13 +418,81 @@ void Widget::on_clearSend_clicked()
 }
 
 /**
- * @brief 字体大小调整
- * @param arg1 新的字体大小
+ * @brief 打开设置对话框
+ * 
+ * 创建并显示设置对话框，包含编码选择、十六进制换行控制和关键词高亮选项。
+ * Requirements: 1.1, 2.1, 3.1, 4.2, 4.3
  */
-void Widget::on_sbFontSize_valueChanged(int arg1)
+void Widget::on_openSetButton_clicked()
 {
-    QFont font;
-    font.setPointSize(arg1);
-    ui->receiveEdit->setFont(font);
-    ui->sendEdit->setFont(font);
+    QDialog *settingsDialog = new QDialog(this);
+    settingsDialog->setWindowTitle("设置");
+    settingsDialog->setFixedSize(320, 250);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(settingsDialog);
+    mainLayout->setSpacing(15);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+
+    // Encoding selection - Requirements: 1.1
+    QHBoxLayout *encodingLayout = new QHBoxLayout();
+    QLabel *encodingLabel = new QLabel("文本编码:", settingsDialog);
+    QComboBox *encodingCombo = new QComboBox(settingsDialog);
+    encodingCombo->addItem("ANSI", AppSettings::ANSI);
+    encodingCombo->addItem("UTF-8", AppSettings::UTF8);
+    encodingCombo->addItem("GBK", AppSettings::GBK);
+    encodingLayout->addWidget(encodingLabel);
+    encodingLayout->addWidget(encodingCombo);
+    encodingLayout->addStretch();
+    mainLayout->addLayout(encodingLayout);
+
+    // Font size selection - Requirements: 5.1
+    QHBoxLayout *fontSizeLayout = new QHBoxLayout();
+    QLabel *fontSizeLabel = new QLabel("字体大小:", settingsDialog);
+    QSpinBox *fontSizeSpinBox = new QSpinBox(settingsDialog);
+    fontSizeSpinBox->setRange(6, 24);
+    fontSizeSpinBox->setValue(9);
+    fontSizeLayout->addWidget(fontSizeLabel);
+    fontSizeLayout->addWidget(fontSizeSpinBox);
+    fontSizeLayout->addStretch();
+    mainLayout->addLayout(fontSizeLayout);
+
+    // Hex newline checkbox - Requirements: 2.1
+    QCheckBox *hexNewlineCheck = new QCheckBox("16进制显示模式下0A 0D换行", settingsDialog);
+    mainLayout->addWidget(hexNewlineCheck);
+
+    // Keyword highlight checkbox - Requirements: 3.1
+    QCheckBox *keywordHighlightCheck = new QCheckBox("高亮接收区关键词", settingsDialog);
+    mainLayout->addWidget(keywordHighlightCheck);
+
+    mainLayout->addStretch();
+
+    // Confirm button
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
+    QPushButton *confirmButton = new QPushButton("确定", settingsDialog);
+    confirmButton->setFixedWidth(80);
+    buttonLayout->addWidget(confirmButton);
+    buttonLayout->addStretch();
+    mainLayout->addLayout(buttonLayout);
+
+    // Load current values from AppSettings - Requirements: 4.2
+    AppSettings *settings = AppSettings::instance();
+    encodingCombo->setCurrentIndex(encodingCombo->findData(settings->encoding()));
+    fontSizeSpinBox->setValue(settings->fontSize());
+    hexNewlineCheck->setChecked(settings->hexNewlineEnabled());
+    keywordHighlightCheck->setChecked(settings->keywordHighlightEnabled());
+
+    // Connect confirm button to save settings and close dialog - Requirements: 4.3
+    QObject::connect(confirmButton, &QPushButton::clicked, settingsDialog, [=]() {
+        AppSettings *settings = AppSettings::instance();
+        settings->setEncoding(static_cast<AppSettings::Encoding>(encodingCombo->currentData().toInt()));
+        settings->setFontSize(fontSizeSpinBox->value());
+        settings->setHexNewlineEnabled(hexNewlineCheck->isChecked());
+        settings->setKeywordHighlightEnabled(keywordHighlightCheck->isChecked());
+        settingsDialog->accept();
+    });
+
+    settingsDialog->exec();
+    delete settingsDialog;
 }
+
