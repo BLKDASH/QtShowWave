@@ -44,7 +44,7 @@ void DataProcessor::process(const QByteArray &data)
     // 添加时间戳（如果启用）
     // Requirements: 3.2
     if (m_timestampEnabled) {
-        result = formatTimestamp() + " ";
+        result = formatTimestamp() + " >>";
     }
 
     // 根据格式转换数据
@@ -66,15 +66,47 @@ void DataProcessor::process(const QByteArray &data)
 QString DataProcessor::toHexString(const QByteArray &data) const
 {
     // 转换为大写十六进制，每字节用空格分隔
-    // 例如：{0x48, 0x65, 0x6C} -> "48 65 6C"
+    // 换行符(0x0A)和回车符(0x0D)单独显示并在前后添加换行
     QString result;
-    result.reserve(data.size() * 3);  // 预分配空间：每字节2个字符 + 1个空格
+    result.reserve(data.size() * 4);  // 预分配空间
 
     for (int i = 0; i < data.size(); ++i) {
-        if (i > 0) {
-            result += ' ';
+        quint8 byte = static_cast<quint8>(data.at(i));
+        
+        // 处理换行符序列 (0x0D 0x0A 或单独的 0x0A 或 0x0D)
+        if (byte == 0x0A || byte == 0x0D) {
+            if (!result.isEmpty() && !result.endsWith('\n')) {
+                result += '\n';
+            }
+            
+            // 收集连续的换行符
+            QString controlSequence = "[" + QString("%1").arg(byte, 2, 16, QChar('0')).toUpper();
+            
+            // 查看后续字节是否也是换行符
+            while (i + 1 < data.size()) {
+                quint8 nextByte = static_cast<quint8>(data.at(i + 1));
+                if (nextByte == 0x0A || nextByte == 0x0D) {
+                    controlSequence += " " + QString("%1").arg(nextByte, 2, 16, QChar('0')).toUpper();
+                    i++;  // 移动到下一个字节
+                } else {
+                    break;
+                }
+            }
+            
+            controlSequence += "]\n";
+            result += controlSequence;
+        } else {
+            // 普通字节处理
+            if (!result.isEmpty() && !result.endsWith(' ') && !result.endsWith('\n')) {
+                result += ' ';
+            }
+            result += QString("%1").arg(byte, 2, 16, QChar('0')).toUpper();
         }
-        result += QString("%1").arg(static_cast<unsigned char>(data.at(i)), 2, 16, QChar('0')).toUpper();
+    }
+
+    // 确保结果末尾没有多余的空格
+    if (result.endsWith(' ')) {
+        result.chop(1);
     }
 
     return result;

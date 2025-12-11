@@ -207,6 +207,18 @@ void Widget::onSerialError(const QString &error)
 }
 
 /**
+ * @brief 显示系统消息
+ * 
+ * 统一显示系统相关信息，添加"SystInfo >>"前缀
+ * 
+ * @param message 系统消息内容
+ */
+void Widget::showSystemMessage(const QString &message)
+{
+    ui->receiveEdit->appendPlainText("SysInfo >> " + message);
+}
+
+/**
  * @brief 串口启动成功回调
  */
 void Widget::onSerialStarted()
@@ -217,7 +229,7 @@ void Widget::onSerialStarted()
     ui->open->setStyleSheet("color: orange;");
     ui->lbConnected->setText("当前已连接");
     ui->lbConnected->setStyleSheet("color: green;");
-    ui->receiveEdit->appendPlainText("串口已连接！\r\n");
+    showSystemMessage("串口已连接！\r\n");
 
     m_refreshTimer->start();
 }
@@ -240,7 +252,7 @@ void Widget::onSerialStopped()
     ui->open->setStyleSheet("color: red;");
     ui->lbConnected->setText("当前未连接");
     ui->lbConnected->setStyleSheet("color: rgb(0, 85, 255);");
-    ui->receiveEdit->appendPlainText("串口已关闭！\r\n");
+    showSystemMessage("串口已关闭！\r\n");
 }
 
 /**
@@ -274,7 +286,7 @@ void Widget::on_clear_clicked()
 void Widget::on_cbPortName_clicked()
 {
     updatePortList();
-    ui->receiveEdit->appendPlainText("检测端口完毕\r\n");
+    showSystemMessage("检测端口完毕\r\n");
 }
 
 /**

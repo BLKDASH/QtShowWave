@@ -53,6 +53,7 @@ private:
     void updatePortList();
     void setPortControlsEnabled(bool enabled);
     void appendToDisplay(const QString &text);
+    void showSystemMessage(const QString &message);
     SerialConfig buildConfig() const;
 
     Ui::Widget *ui;
