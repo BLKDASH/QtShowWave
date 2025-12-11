@@ -1,589 +1,360 @@
 #include "widget.h"
 #include "ui_widget.h"
+
 #include <QMessageBox>
+#include <QSerialPortInfo>
 #include <QRegularExpression>
-#include <QFont>
-#include "qcustomplot.h"
-#include <QtMath>
 
-/*todo:
- * 清空曲线的时候把x轴坐标删掉负号
- * 将串口的名字写在端口号后面
- *
+/**
+ * @brief Widget 构造函数
+ * 
+ * 初始化所有组件并建立信号槽连接。
+ * Requirements: 1.3, 6.1, 6.2, 6.3, 6.4
  */
-//#include <QTextCharFormat>
-
-QFont font;
-
 Widget::Widget(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::Widget)
+    , m_worker(new SerialWorker(this))
+    , m_processor(new DataProcessor(this))
+    , m_buffer(new DataBuffer(65536, this))
+    , m_refreshTimer(new QTimer(this))
+    , m_autoScroll(true)
 {
     ui->setupUi(this);
 
-    customInit();
     ui->open->setStyleSheet("color: red;");
-
-    ui->groupBox_7->setVisible(0);
-//    ui->cusplot->setOpenGl(true);
-//    qDebug() << "opengl:" << ui->cusplot->openGl();
-    ui->cusplot->yAxis->setRange(0,3.3);
-
-    connect(timeStart,&QTimer::timeout,this,&Widget::customTimeOut);
-    connect(/*&showSerialData*/this,&Widget::serialRecOK,this,&Widget::drawSerialData);
-
-    //设置默认波特率
     ui->cbBaudRate->setCurrentText("115200");
-    //设置默认分割条位置
+
     QList<int> sizes;
     sizes << 30000 << 50000;
     ui->splitter->setSizes(sizes);
 
-
-    //保存当前字体，用于后续临时修改颜色
-//    QPalette pletRed;
-//    pletRed.setColor(QPalette::Text,Qt::red);
-//    QPalette pletBlack;
-//    pletBlack.setColor(QPalette::Text,Qt::black);
-    timeStart->setTimerType(Qt::PreciseTimer);
-
-
-    //字体的spinbox初始大小
     ui->sbFontSize->setValue(9);
 
-    on_cbPortName_clicked();
+    updatePortList();
+    setupConnections();
 
-    //串口接收区刷新
-    disconnect(Serial,&QSerialPort::readyRead,this,&Widget::showSerialData);
-    connect(Serial,&QSerialPort::readyRead,this,&Widget::showSerialData);
+    m_refreshTimer->setTimerType(Qt::PreciseTimer);
+    m_refreshTimer->setInterval(REFRESH_INTERVAL_MS);
 }
-
-
 
 Widget::~Widget()
 {
+    m_refreshTimer->stop();
+    if (m_worker->isRunning()) {
+        m_worker->stop();
+    }
     delete ui;
 }
 
-QRegularExpression hexRegex("[A-Fa-f0-9]{2}");
-
-
-
-
-//QTextCharFormat style;
-////字体色
-//style.setForeground(QBrush(Qt::black));
-////fmt.setUnderlineColor("red");
-
-////背景色
-//style.setBackground(QBrush(Qt::white));
-////字体大小
-//style.setFontPointSize(9);
-
-//void oneLineColorful(QString text, QPlainTextEdit* plainTextEdit,int fontSize, QColor fontColor, QColor backColor)
-//{
-//    QTextCharFormat fmt;
-//    //字体色
-//    fmt.setForeground(QBrush(fontColor));
-//    //fmt.setUnderlineColor("red");
-
-//    //背景色
-//    fmt.setBackground(QBrush(backColor));
-//    //字体大小
-//    fmt.setFontPointSize(fontSize);
-//    //文本框使用以上设定
-//    plainTextEdit->mergeCurrentCharFormat(fmt);
-//    //文本框添加文本
-//    plainTextEdit->appendPlainText(text);
-
-//    plainTextEdit->mergeCurrentCharFormat();
-//}
-
-
-//时间获取函数，bool为0时为串口时间戳请求，bool为1时为charts时间轴请求
-QString Widget::upDateTime(bool arg)
+/**
+ * @brief 建立所有信号槽连接
+ */
+void Widget::setupConnections()
 {
-    QTime current_time =QTime::currentTime();
+    connect(m_worker, &SerialWorker::dataReceived, this, &Widget::onDataReceived);
+    connect(m_worker, &SerialWorker::errorOccurred, this, &Widget::onSerialError);
+    connect(m_worker, &SerialWorker::started, this, &Widget::onSerialStarted);
+    connect(m_worker, &SerialWorker::stopped, this, &Widget::onSerialStopped);
 
+    connect(m_processor, &DataProcessor::dataProcessed, this, &Widget::onDataProcessed);
 
-    if(arg)
-    {
+    connect(m_refreshTimer, &QTimer::timeout, this, &Widget::onRefreshTimeout);
 
-        timeStart->start(*timeInterval);
-
-        return "111111111111";
-    }else
-    {
-        QString timeNow = current_time.toString();
-//        QString msNow = QString::number(current_time.msec());此方法会导致位数不统一
-        QString msNow = QString("").asprintf("%03d  >>>end\r\n",current_time.msec());//强制三位数，空位补0
-        return "time>>>  "+timeNow+" "+msNow;
-    }
-
-//    ui->receiveEdit->insertPlainText(current_time.toString());
-//    ui->receiveEdit->insertPlainText(current_time.msec());
+    QScrollBar *scrollBar = ui->receiveEdit->verticalScrollBar();
+    connect(scrollBar, &QScrollBar::valueChanged, this, &Widget::onScrollValueChanged);
 }
 
-//清空
+
+/**
+ * @brief 更新可用串口列表
+ */
+void Widget::updatePortList()
+{
+    QString lastPortName = ui->cbPortName->currentText();
+    ui->cbPortName->clear();
+
+    foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts()) {
+        ui->cbPortName->addItem(info.portName());
+    }
+
+    if (ui->cbPortName->findText(lastPortName) >= 0) {
+        ui->cbPortName->setCurrentText(lastPortName);
+    }
+}
+
+/**
+ * @brief 设置串口配置控件的启用状态
+ * @param enabled true 启用，false 禁用
+ */
+void Widget::setPortControlsEnabled(bool enabled)
+{
+    ui->cbBaudRate->setEnabled(enabled);
+    ui->cbDataBits->setEnabled(enabled);
+    ui->cbParity->setEnabled(enabled);
+    ui->cbPortName->setEnabled(enabled);
+    ui->cbStopBits->setEnabled(enabled);
+}
+
+/**
+ * @brief 从UI控件构建串口配置
+ * @return SerialConfig 配置结构
+ */
+SerialConfig Widget::buildConfig() const
+{
+    SerialConfig config;
+    config.portName = ui->cbPortName->currentText();
+    config.baudRate = ui->cbBaudRate->currentText().toInt();
+
+    switch (ui->cbStopBits->currentIndex()) {
+        case 0: config.stopBits = QSerialPort::OneStop; break;
+        case 1: config.stopBits = QSerialPort::OneAndHalfStop; break;
+        case 2: config.stopBits = QSerialPort::TwoStop; break;
+        default: config.stopBits = QSerialPort::OneStop; break;
+    }
+
+    switch (ui->cbParity->currentIndex()) {
+        case 0: config.parity = QSerialPort::NoParity; break;
+        case 1: config.parity = QSerialPort::OddParity; break;
+        case 2: config.parity = QSerialPort::EvenParity; break;
+        default: config.parity = QSerialPort::NoParity; break;
+    }
+
+    switch (ui->cbDataBits->currentIndex()) {
+        case 0: config.dataBits = QSerialPort::Data8; break;
+        case 1: config.dataBits = QSerialPort::Data7; break;
+        case 2: config.dataBits = QSerialPort::Data6; break;
+        case 3: config.dataBits = QSerialPort::Data5; break;
+        default: config.dataBits = QSerialPort::Data8; break;
+    }
+
+    config.flowControl = QSerialPort::NoFlowControl;
+    config.readBufferSize = 4096;
+
+    return config;
+}
+
+/**
+ * @brief 追加文本到显示区域
+ * 
+ * 根据自动滚动状态决定是否滚动到底部。
+ * Requirements: 6.4
+ * 
+ * @param text 要追加的文本
+ */
+void Widget::appendToDisplay(const QString &text)
+{
+    ui->receiveEdit->insertPlainText(text);
+
+    if (m_autoScroll) {
+        ui->receiveEdit->moveCursor(QTextCursor::End);
+    }
+}
+
+
+/**
+ * @brief 定时刷新回调
+ * 
+ * 批量处理缓冲区中的数据并更新UI。
+ * Requirements: 6.1, 6.2, 6.3
+ */
+void Widget::onRefreshTimeout()
+{
+    if (!m_pendingText.isEmpty()) {
+        appendToDisplay(m_pendingText);
+        m_pendingText.clear();
+    }
+}
+
+/**
+ * @brief 处理接收到的串口数据
+ * 
+ * 将数据写入缓冲区并交给处理器处理。
+ * 
+ * @param data 接收到的原始数据
+ */
+void Widget::onDataReceived(const QByteArray &data)
+{
+    m_buffer->write(data);
+
+    m_processor->setFormat(ui->chk0x16Show->isChecked() 
+        ? DataProcessor::Hexadecimal 
+        : DataProcessor::ASCII);
+    m_processor->setTimestampEnabled(ui->chkTimeShow->isChecked());
+    m_processor->process(data);
+}
+
+/**
+ * @brief 处理已处理的数据
+ * 
+ * 将处理后的文本添加到待显示队列。
+ * Requirements: 6.1, 6.2
+ * 
+ * @param text 处理后的文本
+ */
+void Widget::onDataProcessed(const QString &text)
+{
+    m_pendingText.append(text);
+}
+
+/**
+ * @brief 处理串口错误
+ * @param error 错误描述
+ */
+void Widget::onSerialError(const QString &error)
+{
+    QMessageBox::warning(this, "串口错误", error, QMessageBox::Ok);
+}
+
+/**
+ * @brief 串口启动成功回调
+ */
+void Widget::onSerialStarted()
+{
+    setPortControlsEnabled(false);
+    ui->receiveEdit->setTextInteractionFlags(Qt::NoTextInteraction);
+    ui->open->setText("关闭串口");
+    ui->open->setStyleSheet("color: orange;");
+    ui->lbConnected->setText("当前已连接");
+    ui->lbConnected->setStyleSheet("color: green;");
+    ui->receiveEdit->appendPlainText("串口已连接！\r\n");
+
+    m_refreshTimer->start();
+}
+
+/**
+ * @brief 串口停止回调
+ */
+void Widget::onSerialStopped()
+{
+    m_refreshTimer->stop();
+
+    if (!m_pendingText.isEmpty()) {
+        appendToDisplay(m_pendingText);
+        m_pendingText.clear();
+    }
+
+    setPortControlsEnabled(true);
+    ui->receiveEdit->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    ui->open->setText("打开串口");
+    ui->open->setStyleSheet("color: red;");
+    ui->lbConnected->setText("当前未连接");
+    ui->lbConnected->setStyleSheet("color: rgb(0, 85, 255);");
+    ui->receiveEdit->appendPlainText("串口已关闭！\r\n");
+}
+
+/**
+ * @brief 滚动条值变化回调
+ * 
+ * 实现自动滚动暂停/恢复逻辑。
+ * Requirements: 6.4
+ * 
+ * @param value 当前滚动条值
+ */
+void Widget::onScrollValueChanged(int value)
+{
+    QScrollBar *scrollBar = ui->receiveEdit->verticalScrollBar();
+    m_autoScroll = (value >= scrollBar->maximum() - 10);
+}
+
+
+/**
+ * @brief 清空接收区
+ */
 void Widget::on_clear_clicked()
 {
     ui->receiveEdit->clear();
+    m_pendingText.clear();
+    m_buffer->clear();
 }
 
-
-
-
-//检测串口
+/**
+ * @brief 检测串口按钮点击
+ */
 void Widget::on_cbPortName_clicked()
 {
-    QString lastPortName = ui->cbPortName->currentText();
-//    ui->receiveEdit->appendPlainText(lastName);
-    ui->cbPortName->clear();
-    foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts())
-    {
-        ui->cbPortName->addItem(info.portName());
-    }
-    if(ui->cbPortName->findText(lastPortName))
-    {
-        ui->cbPortName->setCurrentText(lastPortName);
-
-    }
+    updatePortList();
     ui->receiveEdit->appendPlainText("检测端口完毕\r\n");
-
 }
-//打开串口，赋值串口属性
+
+/**
+ * @brief 打开/关闭串口按钮点击
+ */
 void Widget::on_open_clicked()
 {
+    if (!m_worker->isRunning()) {
+        SerialConfig config = buildConfig();
 
-   // if(ui->open->text() == QString("打开串口"))//此时串口没打开
-    if(Serial->isOpen()!=true)
-    {
-        //端口、波特率
-        Serial->setPortName(ui->cbPortName->currentText());
-        Serial->setBaudRate(ui->cbBaudRate->currentText().toInt());
-
-        //停止位
-        switch (ui->cbStopBits->currentIndex())
-        {
-            case 0: Serial->setStopBits(QSerialPort::OneStop);break;
-            case 1: Serial->setStopBits((QSerialPort::OneAndHalfStop));break;
-            case 2: Serial->setStopBits(QSerialPort::TwoStop);break;
-            default:break;
-        }
-//        if(ui->cbBits->currentText().toFloat()== 1.5)
-//            Serial->setStopBits((QSerialPort::OneAndHalfStop));
-//            ui->receiveEdit->setPlainText(QString::number(Serial->stopBits()));
-
-        //校验位
-        switch (ui->cbParity->currentIndex())
-        {
-            //顺序为无，奇，偶
-            case 0: Serial->setParity(QSerialPort::NoParity);break;
-            case 1: Serial->setParity(QSerialPort::OddParity);break;
-            case 2: Serial->setParity(QSerialPort::EvenParity);break;
-            default:break;
-        }
-
-        //数据位
-        switch (ui->cbParity->currentIndex())
-        {
-        //顺序为8，7，6,5
-            case 0: Serial->setDataBits(QSerialPort::Data8);break;
-            case 1: Serial->setDataBits(QSerialPort::Data7);break;
-            case 2: Serial->setDataBits(QSerialPort::Data6);break;
-            case 3: Serial->setDataBits(QSerialPort::Data5);break;
-            default:break;
-        }
-        Serial->setReadBufferSize(500);
-        Serial->setFlowControl(QSerialPort::NoFlowControl);
-
-
-        if(Serial->open(QIODevice::ReadWrite)==false)
-        {
-            QMessageBox::warning(this, "提示", "串口打开失败或已被占用！", QMessageBox::Ok);
-
+        if (!config.isValid()) {
+            QMessageBox::warning(this, "配置错误", config.validationError(), QMessageBox::Ok);
             return;
         }
-//        timeStart->start();
-        //打开成功，失能combobox
-        ui->cbBaudRate->setEnabled(false);
-        ui->cbDataBits->setEnabled(false);
-        ui->cbParity->setEnabled(false);
-        ui->cbPortName->setEnabled(false);
-        ui->cbStopBits->setEnabled(false);
-        //调整串口控制按钮的文字提示
-        upDateTime(1);
-        ui->receiveEdit->setTextInteractionFlags(Qt::NoTextInteraction);
-        ui->open->setText(QString("关闭串口"));
-        ui->open->setStyleSheet("color: orange;");
-        ui->receiveEdit->appendPlainText("串口已连接！\r\n");
-        ui->lbConnected->setText("当前已连接");
-        ui->lbConnected->setStyleSheet("color: green;");
-    }else/* if(ui->open->text() == QString("关闭串口"))*/
-    {
-        ui->receiveEdit->appendPlainText("串口已关闭！\r\n");
-        ui->lbConnected->setText("当前未连接");
-        ui->lbConnected->setStyleSheet("color: rgb(0, 85, 255);");
-        Serial->close();
-        timeStart->stop();
-        ui->receiveEdit->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-        ui->cbBaudRate->setEnabled(true);
-        ui->cbDataBits->setEnabled(true);
-        ui->cbParity->setEnabled(true);
-        ui->cbPortName->setEnabled(true);
-        ui->cbStopBits->setEnabled(true);
-        ui->open->setText(QString("打开串口"));
-//        ui->open->setPalette()
-        ui->open->setStyleSheet("color: red;");
+
+        m_worker->start(config);
+    } else {
+        m_worker->stop();
     }
-
-
-}
-//串口数据显示，信号是串口readReady
-void Widget::showSerialData()
-{
-
-
-    if(Serial->bytesAvailable()>0)
-    {
-
-        QByteArray data = Serial->readAll();
-
-        doubleData = data.toDouble();
-
-
-        if(ui->chk0x16Show->isChecked())
-        {
-//            data = data.toHex();
-            QString temp = "";
-            QString hex = data.toHex();
-            for (int i = 0; i < hex.length(); i = i + 2) {
-                temp += hex.mid(i, 2) + " ";
-            }
-
-            hex = temp.trimmed().toUpper();
-            data = hex.toUtf8();
-
-        }
-
-
-
-        if(ui->chkTimeShow->isChecked())//打印时间戳
-        {
-            ui->receiveEdit->insertPlainText("\r\n");
-
-            ui->receiveEdit->insertPlainText(upDateTime(0));
-
-            ui->receiveEdit->insertPlainText("\r\n");
-
-
-        }
-
-
-//        QString toData = QString(data);
-        QString toData = QString::fromUtf8(data);
-        ui->receiveEdit->insertPlainText(toData);
-//        qDebug()<<toData;
-
-
-//        flagFirstDataToDraw = 1;
-
-
-        emit serialRecOK();
-
-    }
-
-
-
-
 }
 
+/**
+ * @brief 发送按钮点击
+ */
 void Widget::on_send_clicked()
 {
-    //判断是否连接上
-    if(Serial->isOpen()!=true)
-    {
+    if (!m_worker->isRunning()) {
         QMessageBox::information(this, "提示", "串口未打开！", QMessageBox::Ok);
         return;
     }
 
-
     QByteArray sendData = ui->sendEdit->toPlainText().toLocal8Bit();
-    if(!sendData.isEmpty())
-    {
-        QString line = "\r\n-------------------------------------\r\n";
-        QString ShowTheSend = "send>>>  "+ui->sendEdit->toPlainText()+"  >>>end\r\n";
-
-        ui->receiveEdit->appendPlainText(line);
-        ui->receiveEdit->appendPlainText(ShowTheSend);
+    if (sendData.isEmpty()) {
+        return;
     }
-    int count = sendData.size();
 
-    if(ui->chk0x16Send->isChecked())
-    {
+    QString line = "\r\n-------------------------------------\r\n";
+    QString showTheSend = "send>>>  " + ui->sendEdit->toPlainText() + "  >>>end\r\n";
+    ui->receiveEdit->appendPlainText(line);
+    ui->receiveEdit->appendPlainText(showTheSend);
+
+    if (ui->chk0x16Send->isChecked()) {
+        static QRegularExpression hexRegex("[A-Fa-f0-9]{2}");
         QString strData = ui->sendEdit->toPlainText();
-        if(hexRegex.match(strData).hasMatch()){
-
-        }else
-        {
-            QMessageBox::information(this, "提示", "请输入16进制数",QMessageBox::Ok);
+        if (!hexRegex.match(strData).hasMatch()) {
+            QMessageBox::information(this, "提示", "请输入16进制数", QMessageBox::Ok);
             return;
         }
-
-        sendData = sendData.fromHex(sendData);
-
-
+        sendData = QByteArray::fromHex(sendData);
     }
 
-    //发送新行
-    if(ui->chkNewLine->isChecked())
-    {
-//        QString string = QString(sendData);
-//        string += "\r\n";
-//        sendData = string.toUtf8();
-
-        sendData.insert(count,"\r\n");
+    if (ui->chkNewLine->isChecked()) {
+        sendData.append("\r\n");
     }
-    //发送数据到串口
-    Serial->write(sendData);
-//    qDebug()<<QString(sendData);
 
-    if(ui->chkClearAfterSend->isChecked())
+    m_worker->sendData(sendData);
+
+    if (ui->chkClearAfterSend->isChecked()) {
         ui->sendEdit->clear();
+    }
 
-    ui->sendEdit->setFocus();//确保光标还在sendEdit，方便输入
+    ui->sendEdit->setFocus();
 }
 
-//发完清空
+/**
+ * @brief 清空发送区按钮点击
+ */
 void Widget::on_clearSend_clicked()
 {
     ui->sendEdit->clear();
 }
 
-//移动receiveEdit光标到末尾
-void Widget::on_receiveEdit_textChanged()
-{
-    ui->receiveEdit->moveCursor(QTextCursor::End);
-}
-
-//隐藏绘制区
-void Widget::on_btnDraw_stateChanged(int arg1)
-{
-    //0未选中，2完全选中
-    switch(arg1)
-    {
-    case 0:
-        if(this->width() <1500)
-        {
-        if(this->width() > 640)
-        {
-            this->resize(QSize(640,this->height()));
-        }
-        }
-        ui->groupBox_7->setVisible(0);break;
-    case 2:
-        if(this->width() < 1000)
-        {
-            this->resize(QSize(1000,this->height()));
-        }
-
-        ui->groupBox_7->setVisible(1);break;
-    default:break;
-    }
-
-}
-
-//设置字体大小
+/**
+ * @brief 字体大小调整
+ * @param arg1 新的字体大小
+ */
 void Widget::on_sbFontSize_valueChanged(int arg1)
 {
-    //字体
     QFont font;
     font.setPointSize(arg1);
     ui->receiveEdit->setFont(font);
     ui->sendEdit->setFont(font);
 }
-
-void Widget::customInit()
-{
-
-    ui->cusplot->setBackground(Qt::white);
-
-    ui->cusplot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom /*| QCP::iSelectPlottables*/);      //可拖拽+可滚轮缩放
-
-
-    ui->cusplot->addGraph();//添加一条线
-
-    ui->cusplot->graph(0)->setPen(QPen(Qt::red));
-
-    ui->cusplot->xAxis->setLabel("时间(ms)");//设置xy轴的标签
-    ui->cusplot->yAxis->setLabel("值(double)");
-
-
-    ui->cusplot->axisRect()->setRangeZoom(Qt::Vertical);
-
-    updateXYMinMaxToCus();
-    ui->cusplot->legend->setVisible(true);
-
-    ui->cusplot->replot();
-}
-
-
-//此处有qDebug
-void Widget::customTimeOut()
-{
-    countTimeOut++;
-//    qDebug() << this->width() << "    " << this->height();
-    if(flagUpdateDraw)
-    {
-
-//        yVal =countTimeOut%10;
-        //        qDebug()<<countTimeOut;
-        //        qDebug()<<yVal;
-
-
-        ui->cusplot->graph(0)->addData(countTimeOut,doubleData);
-//        qDebug()<<"x="<<countTimeOut<<"   y="<<doubleData;
-
-        //自动更新坐标轴
-        updateXYMinMaxToCus();
-        //    ui->cusplot->graph(0)->rescaleKeyAxis(true);
-        ui->cusplot->replot();
-    }
-
-}
-
-//更新坐标轴最大值
-void Widget::updateXYMinMaxToCus()
-{
-//y轴操作，这里不太对，操作了y轴坐标，导致坐标一直在疯狂扩张。
-//    yMaxAuto = (ui->cusplot->yAxis->range().upper)*1.2;
-//    yMinAuto = (ui->cusplot->yAxis->range().lower)*0.8;
-//    ui->cusplot->yAxis->setRange(yMinAuto,yMaxAuto);
-
-    if(flagAlwaysAuto){
-
-
-
-
-        //x轴
-//        ui->cusplot->xAxis->setRange((ui->cusplot->graph(0)->dataCount()>xRangeRange)
-//                                     ?(ui->cusplot->graph(0)->dataCount()-xRangeRange)
-//                                     :0,
-//                                     ui->cusplot->graph(0)->dataCount());
-
-//        ui->cusplot->graph(0)->rescaleKeyAxis(true);
-
-        //y轴
-        //y轴
-                ui->cusplot->graph(0)->rescaleKeyAxis(true);
-                ui->cusplot->graph(0)->rescaleAxes();
-
-
-        //x轴
-                ui->cusplot->xAxis->setRange((countTimeOut-(3*xRangeRange/4))
-                                         ?(countTimeOut-(3*xRangeRange/4))
-                                             :0,
-                                               countTimeOut+(xRangeRange/4));
-
-
-                }
-
-    if(flagXAuto)
-    {
-                ui->cusplot->xAxis->setRange((countTimeOut-(3*xRangeRange/4))
-                                                 ?(countTimeOut-(3*xRangeRange/4))
-                                                 :0,
-                                             countTimeOut+(xRangeRange/4));
-    }
-
-
-
-//        ui->cusplot->graph(0)->rescaleValueAxis(true,true);
-//        ui->cusplot->graph(0)->rescaleKeyAxis(true);
-//    ui->cusplot->xAxis->setRange(countTimeOut,100,Qt::AlignRight);//设置默认坐标轴值
-//    ui->cusplot->yAxis->setRange(countTimeOut,countTimeOut,Qt::AlignCenter);
-    ui->cusplot->replot();
-}
-
-
-//清空绘制区
-void Widget::on_clearCharts_clicked()
-{
-    ui->cusplot->graph(0)->data().data()->clear();
-    countTimeOut = 0;
-//    timeStart->stop();//使定时器停止，防止增加rimeOut的值导致后续数据的x轴混乱
-
-    ui->cusplot->replot();
-}
-
-/*todo: 右键填写可调范围
- *
- */
-void Widget::on_horizontalSlider_sliderMoved(int position)
-{
-    xRangeRange = position;
-//    ui->cusplot->xAxis->setRange((ui->cusplot->graph(0)->dataCount()>xRangeRange)
-//                                     ?(ui->cusplot->graph(0)->dataCount()-xRangeRange)
-//                                     :0,
-//                                 ui->cusplot->graph(0)->dataCount());
-    ui->cusplot->replot();
-}
-
-
-
-
-
-//置位停止绘制
-void Widget::on_stopDraw_clicked()
-{
-    if(ui->stopDraw->text() == "停止绘制")
-    {
-
-        flagUpdateDraw = 0;
-        ui->stopDraw->setText("开始绘制");
-    }
-    else
-    {
-        flagUpdateDraw = 1;
-        ui->stopDraw->setText("停止绘制");
-    }
-
-}
-
-
-void Widget::on_AutoSet_clicked()
-{
-    ui->cusplot->graph(0)->rescaleKeyAxis(true);
-    ui->cusplot->graph(0)->rescaleAxes();
-}
-
-
-
-
-
-void Widget::on_AlwaysAuto_stateChanged(int arg1)
-{
-    if(arg1 == 2)
-    {
-        flagAlwaysAuto = 1;
-    }
-    else
-    {
-        flagAlwaysAuto = 0;
-    }
-}
-
-void Widget::drawSerialData()
-{
-
-}
-
-
-void Widget::on_checkBox_stateChanged(int arg1)
-{
-    if(arg1 == 2)
-        flagXAuto = 1;
-    else
-        flagXAuto = 0;
-}
-

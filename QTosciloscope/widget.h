@@ -2,120 +2,66 @@
 #define WIDGET_H
 
 #include <QWidget>
-
-#include <QSerialPort>
-#include <QSerialPortInfo>
-#include <QPlainTextEdit>
-#include "qcustomplot.h"
-#include <QDateTime>
 #include <QTimer>
-#include <QFont>
+#include <QScrollBar>
 
+#include "serialworker.h"
+#include "dataprocessor.h"
+#include "databuffer.h"
+#include "serialconfig.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class Widget; }
 QT_END_NAMESPACE
 
+/**
+ * @brief Widget - 主界面控件
+ * 
+ * 负责UI显示和用户交互，集成 SerialWorker、DataProcessor、DataBuffer 组件。
+ * 实现定时批量刷新机制和自动滚动暂停/恢复逻辑。
+ * 
+ * Requirements: 1.3, 6.1, 6.2, 6.3, 6.4
+ */
 class Widget : public QWidget
 {
     Q_OBJECT
 
 public:
-    Widget(QWidget *parent = nullptr);
-
-    long long countTimeOut = 0;
+    explicit Widget(QWidget *parent = nullptr);
     ~Widget();
 
+    static constexpr int REFRESH_INTERVAL_MS = 33; // ~30 FPS
 
-
-public:
-    QSerialPort *Serial = new QSerialPort();
-    //    QFont lastFont;
-    //    QPalette pletRed;
-    //    QPalette pletBlack;
-
-    //    bool isHexadecimal(const QString &str);已改为正则
-
-    //    void oneLineColorful(QString text, QPlainTextEdit* plainTextEdit,int fontSize, QColor fontColor, QColor backColor);
 private slots:
-
-
     void on_clear_clicked();
-
     void on_cbPortName_clicked();
-
     void on_open_clicked();
-
-    void showSerialData();
-
     void on_send_clicked();
-
     void on_clearSend_clicked();
-
-    void on_receiveEdit_textChanged();
-
-    void on_btnDraw_stateChanged(int arg1);
-
-    QString upDateTime(bool arg);
-
     void on_sbFontSize_valueChanged(int arg1);
 
-    void customInit();
-
-    void customTimeOut();
-
-    void updateXYMinMaxToCus();
-
-    //    void horzScrollBarChanged(int value);
-    //    void vertScrollBarChanged(int value);
-    //    void xAxisChanged(QCPRange range);
-    //    void yAxisChanged(QCPRange range);
-
-
-
-    void on_horizontalSlider_sliderMoved(int position);
-
-    void on_stopDraw_clicked();
-
-    void on_AutoSet_clicked();
-
-    void on_clearCharts_clicked();
-
-    void on_AlwaysAuto_stateChanged(int arg1);
-
-    void drawSerialData();//串口收完数据后的绘制操作
-
-    void on_checkBox_stateChanged(int arg1);
+    void onRefreshTimeout();
+    void onDataReceived(const QByteArray &data);
+    void onDataProcessed(const QString &text);
+    void onSerialError(const QString &error);
+    void onSerialStarted();
+    void onSerialStopped();
+    void onScrollValueChanged(int value);
 
 private:
+    void setupConnections();
+    void updatePortList();
+    void setPortControlsEnabled(bool enabled);
+    void appendToDisplay(const QString &text);
+    SerialConfig buildConfig() const;
+
     Ui::Widget *ui;
-
-    double doubleData = 0.0;
-
-
-    int MaxX = 100;
-    int MinX = 0;
-    int MaxY = 100;
-    int MinY = -100;
-    QTimer *timeStart = new QTimer();
-
-    bool flagUpdateDraw = 1;
-    bool flagAlwaysAuto = 1;
-    bool flagFirstDataToDraw = 0;
-    bool flagXAuto = 1;
-
-    //绘图数据更新间隔
-    int tIv = 15;
-    int *timeInterval = &tIv;
-    double yVal = 0;
-
-    int xRangeRange = 500;
-
-    double yMaxAuto = 0;
-    double yMinAuto = 0;
-    //testData
-
-signals:
-    void serialRecOK();
+    SerialWorker *m_worker;
+    DataProcessor *m_processor;
+    DataBuffer *m_buffer;
+    QTimer *m_refreshTimer;
+    QString m_pendingText;
+    bool m_autoScroll = true;
 };
+
 #endif // WIDGET_H

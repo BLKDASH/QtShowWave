@@ -19,5 +19,3 @@ void MyComboBox::mousePressEvent(QMouseEvent *event)
     }
     QComboBox::mousePressEvent(event);
 }
-
-//void MyComboBox::mousePressEvent
