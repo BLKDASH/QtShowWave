@@ -49,6 +49,7 @@ private slots:
     void onSerialStopped();
     void onScrollValueChanged(int value);
     void onSpeedUpdated(double bytesPerSecond, qint64 totalBytes);
+    void onSplitterMoved(int pos, int index);
 
     void on_openSetButton_clicked();
 

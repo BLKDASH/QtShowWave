@@ -187,6 +187,9 @@ void Widget::setupConnections()
     connect(scrollBar, &QScrollBar::valueChanged, this, &Widget::onScrollValueChanged);
 
     connect(m_speedMonitor, &SpeedMonitor::speedUpdated, this, &Widget::onSpeedUpdated);
+
+    // 监听 splitter 移动，当左边面板消失时同时隐藏发送区
+    connect(ui->splitter, &QSplitter::splitterMoved, this, &Widget::onSplitterMoved);
 }
 
 
@@ -505,6 +508,22 @@ void Widget::onScrollValueChanged(int value)
     m_autoScroll = (value >= scrollBar->maximum() - 10);
 }
 
+
+/**
+ * @brief splitter 移动回调
+ * 
+ * 当左边配置面板被拖动到消失时，同时隐藏发送区。
+ * 
+ * @param pos 分割条位置
+ * @param index 分割条索引
+ */
+void Widget::onSplitterMoved(int pos, int index)
+{
+    Q_UNUSED(index);
+    // 当左边面板宽度小于等于 5 像素时，认为已经消失，同时隐藏发送区
+    bool leftPanelVisible = (pos > 5);
+    ui->groupBox_3->setVisible(leftPanelVisible);
+}
 
 /**
  * @brief 清空接收区
