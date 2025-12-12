@@ -6,6 +6,8 @@ CONFIG += c++17
 
 TARGET = SSW_SerialHelper
 
+VERSION = 2.0.1
+
 SOURCES += \
     appsettings.cpp \
     databuffer.cpp \

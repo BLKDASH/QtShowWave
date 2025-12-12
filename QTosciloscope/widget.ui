@@ -40,7 +40,7 @@
           </size>
          </property>
          <property name="title">
-          <string>串口操作</string>
+          <string>串口配置</string>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_5">
           <item>

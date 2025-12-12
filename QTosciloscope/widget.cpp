@@ -14,6 +14,7 @@
 #include <QCheckBox>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QAbstractItemView>
 
 /**
  * @brief Widget 构造函数
@@ -86,8 +87,13 @@ Widget::Widget(QWidget *parent)
     // Apply last used port name if available
     // Requirements: 6.4
     QString lastPort = settings->lastPortName();
-    if (!lastPort.isEmpty() && ui->cbPortName->findText(lastPort) >= 0) {
-        ui->cbPortName->setCurrentText(lastPort);
+    if (!lastPort.isEmpty()) {
+        for (int i = 0; i < ui->cbPortName->count(); ++i) {
+            if (ui->cbPortName->itemData(i).toString() == lastPort) {
+                ui->cbPortName->setCurrentIndex(i);
+                break;
+            }
+        }
     }
 
     // Connect dark mode signal and apply initial dark mode setting
@@ -136,15 +142,40 @@ void Widget::setupConnections()
  */
 void Widget::updatePortList()
 {
-    QString lastPortName = ui->cbPortName->currentText();
+    QString lastPortName = ui->cbPortName->currentData().toString();
+    if (lastPortName.isEmpty()) {
+        lastPortName = ui->cbPortName->currentText().split(" ").first();
+    }
     ui->cbPortName->clear();
 
     foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts()) {
-        ui->cbPortName->addItem(info.portName());
+        QString displayText = info.portName();
+        QString tooltip = info.portName();
+        if (!info.description().isEmpty()) {
+            displayText += " - " + info.description();
+            tooltip += "\n" + info.description();
+        }
+        ui->cbPortName->addItem(displayText, info.portName());
+        ui->cbPortName->setItemData(ui->cbPortName->count() - 1, tooltip, Qt::ToolTipRole);
     }
 
-    if (ui->cbPortName->findText(lastPortName) >= 0) {
-        ui->cbPortName->setCurrentText(lastPortName);
+    // 恢复之前选择的端口
+    for (int i = 0; i < ui->cbPortName->count(); ++i) {
+        if (ui->cbPortName->itemData(i).toString() == lastPortName) {
+            ui->cbPortName->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // 下拉列表展开时根据内容自动变宽
+    int maxWidth = 0;
+    QFontMetrics fm(ui->cbPortName->font());
+    for (int i = 0; i < ui->cbPortName->count(); ++i) {
+        int width = fm.horizontalAdvance(ui->cbPortName->itemText(i));
+        maxWidth = qMax(maxWidth, width);
+    }
+    if (ui->cbPortName->view()) {
+        ui->cbPortName->view()->setMinimumWidth(qMin(maxWidth + 40, 250)); // 上限250
     }
 }
 
@@ -168,7 +199,7 @@ void Widget::setPortControlsEnabled(bool enabled)
 SerialConfig Widget::buildConfig() const
 {
     SerialConfig config;
-    config.portName = ui->cbPortName->currentText();
+    config.portName = ui->cbPortName->currentData().toString();
     config.baudRate = ui->cbBaudRate->currentText().toInt();
 
     switch (ui->cbStopBits->currentIndex()) {
@@ -351,7 +382,7 @@ void Widget::onSerialStarted()
     showSystemMessage("串口已连接！");
 
     // Save last used port name - Requirements: 6.4
-    AppSettings::instance()->setLastPortName(ui->cbPortName->currentText());
+    AppSettings::instance()->setLastPortName(ui->cbPortName->currentData().toString());
 
     // Start speed monitoring - Requirements: 1.3, 3.2
     m_speedMonitor->reset();
@@ -397,8 +428,8 @@ void Widget::onSerialStopped()
 void Widget::onSpeedUpdated(double bytesPerSecond, qint64 totalBytes)
 {
     QString title = QString("接收区 [%1 | 总计: %2]")
-        .arg(SpeedMonitor::formatSpeed(bytesPerSecond))
-        .arg(SpeedMonitor::formatBytes(totalBytes));
+        .arg(SpeedMonitor::formatSpeed(bytesPerSecond),
+             SpeedMonitor::formatBytes(totalBytes));
     ui->groupBox_2->setTitle(title);
 }
 
@@ -473,10 +504,8 @@ void Widget::on_send_clicked()
         return;
     }
 
-    QString line = "\r\n-------------------------------------\r\n";
-    QString showTheSend = "send>>>  " + ui->sendEdit->toPlainText() + "  >>>end\r\n";
-    ui->receiveEdit->appendPlainText(line);
-    ui->receiveEdit->appendPlainText(showTheSend);
+    QString showTheSend = "SEND >> " + ui->sendEdit->toPlainText();
+    ui->receiveEdit->appendHtml("<span style='color:gray;'>" + showTheSend.toHtmlEscaped() + "</span><br>");
 
     if (ui->chk0x16Send->isChecked()) {
         static QRegularExpression hexRegex("[A-Fa-f0-9]{2}");
@@ -551,7 +580,7 @@ void Widget::on_openSetButton_clicked()
     mainLayout->addLayout(fontSizeLayout);
 
     // Hex newline checkbox - Requirements: 2.1
-    QCheckBox *hexNewlineCheck = new QCheckBox("16进制显示模式下0A 0D换行", settingsDialog);
+    QCheckBox *hexNewlineCheck = new QCheckBox("16进制显示模式下 0A 0D 换行", settingsDialog);
     mainLayout->addWidget(hexNewlineCheck);
 
     // Keyword highlight checkbox - Requirements: 3.1
