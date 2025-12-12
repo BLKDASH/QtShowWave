@@ -1,62 +1,88 @@
 #include "keywordhighlighter.h"
 
+// 辅助函数：添加关键词高亮规则
+void KeywordHighlighter::addKeywordRule(const QString &pattern, const QColor &color, 
+                                         bool bold, bool caseInsensitive)
+{
+    HighlightRule rule;
+    QTextCharFormat format;
+    format.setForeground(color);
+    if (bold) {
+        format.setFontWeight(QFont::Bold);
+    }
+    
+    QRegularExpression::PatternOptions options = QRegularExpression::NoPatternOption;
+    if (caseInsensitive) {
+        options = QRegularExpression::CaseInsensitiveOption;
+    }
+    rule.pattern = QRegularExpression(pattern, options);
+    rule.format = format;
+    m_rules.append(rule);
+}
+
 /**
  * @brief KeywordHighlighter 构造函数
  * 
- * 初始化高亮规则：
- * - info: 蓝色 (#0066CC)
- * - warning: 橙色 (#FF9900)
- * - error: 红色 (#CC0000)
- * - sysinfo: 绿色 (#00AA00)
- * - 时间戳: 灰色 (#808080)
- * 
- * 所有规则使用大小写不敏感匹配。
+ * 初始化高亮规则，支持多种日志级别和常见模式。
  * Requirements: 3.2, 3.5
  */
 KeywordHighlighter::KeywordHighlighter(QTextDocument *parent)
     : QSyntaxHighlighter(parent)
     , m_enabled(true)
 {
-    HighlightRule rule;
-
-    // info 关键词 - 蓝色
-    QTextCharFormat infoFormat;
-    infoFormat.setForeground(QColor("#0066CC"));
-    rule.pattern = QRegularExpression(QStringLiteral("\\binfo\\b"),
-                                      QRegularExpression::CaseInsensitiveOption);
-    rule.format = infoFormat;
-    m_rules.append(rule);
-
-    // warning 关键词 - 橙色
-    QTextCharFormat warningFormat;
-    warningFormat.setForeground(QColor("#FF9900"));
-    rule.pattern = QRegularExpression(QStringLiteral("\\bwarning\\b"),
-                                      QRegularExpression::CaseInsensitiveOption);
-    rule.format = warningFormat;
-    m_rules.append(rule);
-
-    // error 关键词 - 红色
-    QTextCharFormat errorFormat;
-    errorFormat.setForeground(QColor("#CC0000"));
-    rule.pattern = QRegularExpression(QStringLiteral("\\berror\\b"),
-                                      QRegularExpression::CaseInsensitiveOption);
-    rule.format = errorFormat;
-    m_rules.append(rule);
-
-    // sysinfo 关键词 - 绿色
-    QTextCharFormat sysinfoFormat;
-    sysinfoFormat.setForeground(QColor("#00AA00"));
-    rule.pattern = QRegularExpression(QStringLiteral("\\bsysinfo\\b"),
-                                      QRegularExpression::CaseInsensitiveOption);
-    rule.format = sysinfoFormat;
-    m_rules.append(rule);
-
-    // 时间戳 - 灰色 (格式: HH:mm:ss.zzz >>)
-    QTextCharFormat timestampFormat;
-    timestampFormat.setForeground(QColor("#808080"));  // 灰色
-    rule.pattern = QRegularExpression(QStringLiteral("\\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\s*>>"));
-    rule.format = timestampFormat;
-    m_rules.append(rule);
+    // === 日志级别关键词 ===
+    // DEBUG/TRACE/D: - 灰色
+    addKeywordRule("\\b(debug|trace|verbose)\\b", QColor("#808080"), false, true);
+    addKeywordRule("^\\s*[DdVv]:", QColor("#808080"), false, false);  // D: V: 开头
+    
+    // INFO/I: - 蓝色
+    addKeywordRule("\\b(info|notice)\\b", QColor("#0066CC"), false, true);
+    addKeywordRule("^\\s*[Ii]:", QColor("#0066CC"), false, false);  // I: 开头
+    
+    // WARNING/WARN/W: - 橙色
+    addKeywordRule("\\b(warning|warn)\\b", QColor("#FF9900"), false, true);
+    addKeywordRule("^\\s*[Ww]:", QColor("#FF9900"), false, false);  // W: 开头
+    
+    // ERROR/ERR/FAIL/E: - 红色
+    addKeywordRule("\\b(error|err|fail|failed|failure)\\b", QColor("#CC0000"), false, true);
+    addKeywordRule("^\\s*[Ee]:", QColor("#CC0000"), false, false);  // E: 开头
+    
+    // FATAL/CRITICAL/F: - 深红色
+    addKeywordRule("\\b(fatal|critical|panic)\\b", QColor("#990000"), false, true);
+    addKeywordRule("^\\s*[Ff]:", QColor("#990000"), false, false);  // F: 开头
+    
+    // SUCCESS/OK/PASS - 绿色
+    addKeywordRule("\\b(success|ok|pass|passed|done|complete|completed)\\b", QColor("#00AA00"), false, true);
+    
+    // SYSINFO - 绿色
+    addKeywordRule("\\bsysinfo\\b", QColor("#00AA00"), false, true);
+    
+    // === 常见日志格式前缀 ===
+    // [INFO] [WARN] [ERROR] 等方括号格式
+    addKeywordRule("\\[DEBUG\\]|\\[TRACE\\]|\\[VERBOSE\\]", QColor("#808080"), false, true);
+    addKeywordRule("\\[INFO\\]|\\[NOTICE\\]", QColor("#0066CC"), false, true);
+    addKeywordRule("\\[WARN\\]|\\[WARNING\\]", QColor("#FF9900"), false, true);
+    addKeywordRule("\\[ERROR\\]|\\[ERR\\]|\\[FAIL\\]", QColor("#CC0000"), false, true);
+    addKeywordRule("\\[FATAL\\]|\\[CRITICAL\\]", QColor("#990000"), false, true);
+    
+    // === 特殊格式 ===
+    // 时间戳 (HH:mm:ss.zzz >>) - 灰色
+    addKeywordRule("\\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\s*>>", QColor("#808080"), false, false);
+    
+    // 十六进制数 (0x...) - 紫色
+    addKeywordRule("\\b0x[0-9A-Fa-f]+\\b", QColor("#9932CC"), false, false);
+    
+    // 数字 - 青色 (可选，如果觉得太花哨可以注释掉)
+    // addKeywordRule("\\b\\d+\\b", QColor("#008B8B"), false, false);
+    
+    // SEND >> 前缀 - 灰色斜体
+    HighlightRule sendRule;
+    QTextCharFormat sendFormat;
+    sendFormat.setForeground(QColor("#666666"));
+    sendFormat.setFontItalic(true);
+    sendRule.pattern = QRegularExpression("SEND\\s*>>");
+    sendRule.format = sendFormat;
+    m_rules.append(sendRule);
 }
 
 /**

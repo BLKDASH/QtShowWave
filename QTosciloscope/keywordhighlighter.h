@@ -61,6 +61,16 @@ private:
         QTextCharFormat format;      ///< 文本格式（颜色等）
     };
 
+    /**
+     * @brief 添加关键词高亮规则
+     * @param pattern 正则表达式模式
+     * @param color 高亮颜色
+     * @param bold 是否加粗
+     * @param caseInsensitive 是否大小写不敏感
+     */
+    void addKeywordRule(const QString &pattern, const QColor &color, 
+                        bool bold = false, bool caseInsensitive = true);
+
     QVector<HighlightRule> m_rules;  ///< 高亮规则列表
     bool m_enabled = true;           ///< 高亮启用状态
 };

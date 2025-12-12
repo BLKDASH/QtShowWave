@@ -389,7 +389,7 @@ void Widget::onSerialError(const QString &error)
  */
 void Widget::showSystemMessage(const QString &message)
 {
-    ui->receiveEdit->insertPlainText("SysInfo >> " + message + "\r\n");
+    ui->receiveEdit->insertPlainText("SYSINFO >> " + message + "\r\n");
     ui->receiveEdit->moveCursor(QTextCursor::End);
 }
 
@@ -622,9 +622,53 @@ void Widget::on_openSetButton_clicked()
     QCheckBox *hexNewlineCheck = new QCheckBox("16进制显示模式下 0A 0D 换行", settingsDialog);
     mainLayout->addWidget(hexNewlineCheck);
 
-    // Keyword highlight checkbox - Requirements: 3.1
+    // Keyword highlight checkbox with help button - Requirements: 3.1
+    QHBoxLayout *highlightLayout = new QHBoxLayout();
     QCheckBox *keywordHighlightCheck = new QCheckBox("高亮接收区关键词", settingsDialog);
-    mainLayout->addWidget(keywordHighlightCheck);
+    QPushButton *highlightHelpBtn = new QPushButton("?", settingsDialog);
+    highlightHelpBtn->setFixedSize(20, 20);
+    highlightHelpBtn->setToolTip("查看高亮规则");
+    highlightLayout->addWidget(keywordHighlightCheck);
+    highlightLayout->addWidget(highlightHelpBtn);
+    highlightLayout->addStretch();
+    mainLayout->addLayout(highlightLayout);
+    
+    // 高亮规则帮助对话框
+    QObject::connect(highlightHelpBtn, &QPushButton::clicked, settingsDialog, [settingsDialog]() {
+        QMessageBox helpBox(settingsDialog);
+        helpBox.setWindowTitle("关键词高亮规则");
+        helpBox.setTextFormat(Qt::RichText);
+        helpBox.setText(
+            "<h3>支持的高亮规则</h3>"
+            "<p><b>日志级别关键词：</b></p>"
+            "<ul>"
+            "<li><span style='color:#808080'>debug, trace, verbose</span> - 灰色</li>"
+            "<li><span style='color:#0066CC'>info, notice</span> - 蓝色</li>"
+            "<li><span style='color:#FF9900'>warning, warn</span> - 橙色</li>"
+            "<li><span style='color:#CC0000'>error, err, fail, failed</span> - 红色</li>"
+            "<li><span style='color:#990000'>fatal, critical, panic</span> - 深红</li>"
+            "<li><span style='color:#00AA00'>success, ok, pass, done</span> - 绿色</li>"
+            "</ul>"
+            "<p><b>简写前缀（行首）：</b></p>"
+            "<ul>"
+            "<li><span style='color:#808080'>D: V:</span> - 灰色</li>"
+            "<li><span style='color:#0066CC'>I:</span> - 蓝色</li>"
+            "<li><span style='color:#FF9900'>W:</span> - 橙色</li>"
+            "<li><span style='color:#CC0000'>E:</span> - 红色</li>"
+            "<li><span style='color:#990000'>F:</span> - 深红</li>"
+            "</ul>"
+            "<p><b>方括号格式：</b></p>"
+            "<ul>"
+            "<li>[INFO] [WARN] [ERROR] 等</li>"
+            "</ul>"
+            "<p><b>其他：</b></p>"
+            "<ul>"
+            "<li><span style='color:#9932CC'>0x1234</span> - 十六进制数（紫色）</li>"
+            "<li><span style='color:#808080'>时间戳 >></span> - 灰色</li>"
+            "</ul>"
+        );
+        helpBox.exec();
+    });
 
     // Dark mode checkbox - Requirements: 1.1, 1.2, 1.3, 1.4
     QCheckBox *darkModeCheck = new QCheckBox("深色模式", settingsDialog);
