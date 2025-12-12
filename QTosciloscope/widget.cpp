@@ -73,18 +73,26 @@ Widget::Widget(QWidget *parent)
     connect(settings, &AppSettings::keywordHighlightEnabledChanged, 
             m_highlighter, &KeywordHighlighter::setEnabled);
 
-    // Apply initial font size from AppSettings
+    // Apply initial font settings from AppSettings
     // Requirements: 5.2
-    int fontSize = settings->fontSize();
-    QFont font;
-    font.setPointSize(fontSize);
+    QFont font = ui->receiveEdit->font();
+    font.setPointSize(settings->fontSize());
+    font.setFamily(settings->fontFamily());
     ui->receiveEdit->setFont(font);
     ui->sendEdit->setFont(font);
     
     // Connect fontSizeChanged signal
     connect(settings, &AppSettings::fontSizeChanged, this, [this](int size) {
-        QFont font;
+        QFont font = ui->receiveEdit->font();
         font.setPointSize(size);
+        ui->receiveEdit->setFont(font);
+        ui->sendEdit->setFont(font);
+    });
+    
+    // Connect fontFamilyChanged signal
+    connect(settings, &AppSettings::fontFamilyChanged, this, [this](const QString &family) {
+        QFont font = ui->receiveEdit->font();
+        font.setFamily(family);
         ui->receiveEdit->setFont(font);
         ui->sendEdit->setFont(font);
     });
@@ -119,6 +127,31 @@ Widget::Widget(QWidget *parent)
     if (!splitterState.isEmpty()) {
         ui->splitter->restoreState(splitterState);
     }
+    
+    // Restore serial port settings
+    ui->cbBaudRate->setCurrentText(settings->baudRate());
+    ui->cbStopBits->setCurrentIndex(settings->stopBitsIndex());
+    ui->cbDataBits->setCurrentIndex(settings->dataBitsIndex());
+    ui->cbParity->setCurrentIndex(settings->parityIndex());
+    
+    // Restore checkbox settings
+    ui->chk0x16Show->setChecked(settings->hexDisplayEnabled());
+    ui->chkTimeShow->setChecked(settings->timestampEnabled());
+    ui->chkClearAfterSend->setChecked(settings->clearAfterSendEnabled());
+    ui->chk0x16Send->setChecked(settings->hexSendEnabled());
+    ui->chkNewLine->setChecked(settings->newLineEnabled());
+    
+    // Connect signals to save settings when changed
+    connect(ui->cbBaudRate, &QComboBox::currentTextChanged, settings, &AppSettings::setBaudRate);
+    connect(ui->cbStopBits, QOverload<int>::of(&QComboBox::currentIndexChanged), settings, &AppSettings::setStopBitsIndex);
+    connect(ui->cbDataBits, QOverload<int>::of(&QComboBox::currentIndexChanged), settings, &AppSettings::setDataBitsIndex);
+    connect(ui->cbParity, QOverload<int>::of(&QComboBox::currentIndexChanged), settings, &AppSettings::setParityIndex);
+    
+    connect(ui->chk0x16Show, &QCheckBox::toggled, settings, &AppSettings::setHexDisplayEnabled);
+    connect(ui->chkTimeShow, &QCheckBox::toggled, settings, &AppSettings::setTimestampEnabled);
+    connect(ui->chkClearAfterSend, &QCheckBox::toggled, settings, &AppSettings::setClearAfterSendEnabled);
+    connect(ui->chk0x16Send, &QCheckBox::toggled, settings, &AppSettings::setHexSendEnabled);
+    connect(ui->chkNewLine, &QCheckBox::toggled, settings, &AppSettings::setNewLineEnabled);
 }
 
 Widget::~Widget()
@@ -516,21 +549,46 @@ void Widget::on_open_clicked()
 
 /**
  * @brief 发送按钮点击
+ * 
+ * 如果串口未打开，自动尝试打开串口后再发送。
  */
 void Widget::on_send_clicked()
 {
+    // 如果串口未打开，自动尝试打开
     if (!m_worker->isRunning()) {
-        QMessageBox::information(this, "提示", "串口未打开！", QMessageBox::Ok);
+        SerialConfig config = buildConfig();
+        if (!config.isValid()) {
+            QMessageBox::warning(this, "配置错误", config.validationError(), QMessageBox::Ok);
+            return;
+        }
+        m_worker->start(config);
+        // 等待串口打开后再发送（通过 QTimer 延迟执行）
+        // 如果打开失败，onSerialError 会处理错误提示
+        QTimer::singleShot(100, this, [this]() {
+            if (m_worker->isRunning()) {
+                performSend();
+            }
+        });
         return;
     }
 
+    performSend();
+}
+
+/**
+ * @brief 执行实际的发送操作
+ */
+void Widget::performSend()
+{
     QByteArray sendData = ui->sendEdit->toPlainText().toLocal8Bit();
     if (sendData.isEmpty()) {
+        ui->sendEdit->setFocus();
         return;
     }
 
     QString showTheSend = "SEND >> " + ui->sendEdit->toPlainText();
-    ui->receiveEdit->appendHtml("<span style='color:gray;'>" + showTheSend.toHtmlEscaped() + "</span><br>");
+    ui->receiveEdit->insertPlainText(showTheSend + "\r\n");
+    ui->receiveEdit->moveCursor(QTextCursor::End);
 
     if (ui->chk0x16Send->isChecked()) {
         static QRegularExpression hexRegex("[A-Fa-f0-9]{2}");
@@ -561,6 +619,7 @@ void Widget::on_send_clicked()
 void Widget::on_clearSend_clicked()
 {
     ui->sendEdit->clear();
+    ui->sendEdit->setFocus();
 }
 
 /**
@@ -597,7 +656,6 @@ void Widget::on_openSetButton_clicked()
     QLabel *fontSizeLabel = new QLabel("字体大小:", settingsDialog);
     QSpinBox *fontSizeSpinBox = new QSpinBox(settingsDialog);
     fontSizeSpinBox->setRange(6, 24);
-    fontSizeSpinBox->setValue(9);
     fontSizeSpinBox->setFixedHeight(28);
     fontSizeLayout->addWidget(fontSizeLabel);
     fontSizeLayout->addWidget(fontSizeSpinBox);
@@ -640,31 +698,33 @@ void Widget::on_openSetButton_clicked()
         helpBox.setTextFormat(Qt::RichText);
         helpBox.setText(
             "<h3>支持的高亮规则</h3>"
-            "<p><b>日志级别关键词：</b></p>"
+            "<p><b>【全文匹配 | 大小写不敏感】日志级别关键词：</b></p>"
             "<ul>"
             "<li><span style='color:#808080'>debug, trace, verbose</span> - 灰色</li>"
+            "<li><span style='color:#808080'>[DEBUG] [TRACE] [VERBOSE]</span> - 灰色</li>"
             "<li><span style='color:#0066CC'>info, notice</span> - 蓝色</li>"
+            "<li><span style='color:#0066CC'>[INFO] [NOTICE]</span> - 蓝色</li>"
             "<li><span style='color:#FF9900'>warning, warn</span> - 橙色</li>"
-            "<li><span style='color:#CC0000'>error, err, fail, failed</span> - 红色</li>"
+            "<li><span style='color:#FF9900'>[WARN] [WARNING]</span> - 橙色</li>"
+            "<li><span style='color:#CC0000'>error, err, fail, failed, failure</span> - 红色</li>"
+            "<li><span style='color:#CC0000'>[ERROR] [ERR] [FAIL]</span> - 红色</li>"
             "<li><span style='color:#990000'>fatal, critical, panic</span> - 深红</li>"
-            "<li><span style='color:#00AA00'>success, ok, pass, done</span> - 绿色</li>"
+            "<li><span style='color:#990000'>[FATAL] [CRITICAL]</span> - 深红</li>"
+            "<li><span style='color:#00AA00'>success, ok, pass, done, complete</span> - 绿色</li>"
             "</ul>"
-            "<p><b>简写前缀（行首）：</b></p>"
+            "<p><b>【行首匹配 | 大小写不敏感】简写前缀：</b></p>"
             "<ul>"
-            "<li><span style='color:#808080'>D: V:</span> - 灰色</li>"
-            "<li><span style='color:#0066CC'>I:</span> - 蓝色</li>"
-            "<li><span style='color:#FF9900'>W:</span> - 橙色</li>"
-            "<li><span style='color:#CC0000'>E:</span> - 红色</li>"
-            "<li><span style='color:#990000'>F:</span> - 深红</li>"
+            "<li><span style='color:#808080'>D: V:</span> - 灰色 (Debug/Verbose)</li>"
+            "<li><span style='color:#0066CC'>I:</span> - 蓝色 (Info)</li>"
+            "<li><span style='color:#FF9900'>W:</span> - 橙色 (Warning)</li>"
+            "<li><span style='color:#CC0000'>E:</span> - 红色 (Error)</li>"
+            "<li><span style='color:#990000'>F:</span> - 深红 (Fatal)</li>"
             "</ul>"
-            "<p><b>方括号格式：</b></p>"
+            "<p><b>【全文匹配 | 大小写敏感】其他格式：</b></p>"
             "<ul>"
-            "<li>[INFO] [WARN] [ERROR] 等</li>"
-            "</ul>"
-            "<p><b>其他：</b></p>"
-            "<ul>"
-            "<li><span style='color:#9932CC'>0x1234</span> - 十六进制数（紫色）</li>"
-            "<li><span style='color:#808080'>时间戳 >></span> - 灰色</li>"
+            "<li><span style='color:#9932CC'>0x1234 0xABCD</span> - 十六进制数（紫色）</li>"
+            "<li><span style='color:#808080'>HH:mm:ss.zzz >></span> - 时间戳（灰色）</li>"
+            "<li><span style='color:#666666; font-style:italic'>SEND >></span> - 发送前缀（灰色斜体）</li>"
             "</ul>"
         );
         helpBox.exec();

@@ -24,6 +24,19 @@ public:
     bool darkModeEnabled() const;
     QSize windowSize() const;
     QByteArray splitterState() const;
+    
+    // Serial port settings getters
+    QString baudRate() const;
+    int stopBitsIndex() const;
+    int dataBitsIndex() const;
+    int parityIndex() const;
+    
+    // Checkbox settings getters
+    bool hexDisplayEnabled() const;
+    bool timestampEnabled() const;
+    bool clearAfterSendEnabled() const;
+    bool hexSendEnabled() const;
+    bool newLineEnabled() const;
 
     // Setters
     void setEncoding(Encoding encoding);
@@ -35,6 +48,19 @@ public:
     void setDarkModeEnabled(bool enabled);
     void setWindowSize(const QSize &size);
     void setSplitterState(const QByteArray &state);
+    
+    // Serial port settings setters
+    void setBaudRate(const QString &baudRate);
+    void setStopBitsIndex(int index);
+    void setDataBitsIndex(int index);
+    void setParityIndex(int index);
+    
+    // Checkbox settings setters
+    void setHexDisplayEnabled(bool enabled);
+    void setTimestampEnabled(bool enabled);
+    void setClearAfterSendEnabled(bool enabled);
+    void setHexSendEnabled(bool enabled);
+    void setNewLineEnabled(bool enabled);
 
 signals:
     void encodingChanged(AppSettings::Encoding encoding);
@@ -61,6 +87,19 @@ private:
     bool m_darkModeEnabled = false;
     QSize m_windowSize;
     QByteArray m_splitterState;
+    
+    // Serial port settings
+    QString m_baudRate = "115200";
+    int m_stopBitsIndex = 0;
+    int m_dataBitsIndex = 0;
+    int m_parityIndex = 0;
+    
+    // Checkbox settings
+    bool m_hexDisplayEnabled = false;
+    bool m_timestampEnabled = false;
+    bool m_clearAfterSendEnabled = false;
+    bool m_hexSendEnabled = false;
+    bool m_newLineEnabled = true;
 };
 
 #endif // APPSETTINGS_H

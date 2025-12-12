@@ -58,6 +58,7 @@ private:
     void setPortControlsEnabled(bool enabled);
     void appendToDisplay(const QString &text);
     void showSystemMessage(const QString &message);
+    void performSend();
     SerialConfig buildConfig() const;
     void applyDarkMode(bool enabled);
 

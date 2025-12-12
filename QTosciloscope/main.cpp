@@ -46,11 +46,11 @@ void applyFont(const QString &displayName, int fontSize) {
         // 使用系统默认字体
         customFont = g_systemDefaultFont;
         customFont.setPointSize(fontSize);
-        qDebug() << "应用系统默认字体:" << customFont.family() << "大小:" << fontSize;
+        // qDebug() << "应用系统默认字体:" << customFont.family() << "大小:" << fontSize;
     } else {
         QString actualFamily = g_fontFamilyMap.value(displayName, displayName);
         customFont = QFont(actualFamily, fontSize);
-        qDebug() << "应用字体:" << actualFamily << "大小:" << fontSize;
+        // qDebug() << "应用字体:" << actualFamily << "大小:" << fontSize;
     }
     QApplication::setFont(customFont);
     
@@ -76,6 +76,7 @@ int main(int argc, char *argv[])
     
     // 从设置中获取字体配置并应用
     AppSettings *settings = AppSettings::instance();
+    // qDebug() << "启动时读取设置 - 字体:" << settings->fontFamily() << "大小:" << settings->fontSize();
     applyFont(settings->fontFamily(), settings->fontSize());
     
     // 连接字体变更信号
@@ -87,6 +88,10 @@ int main(int argc, char *argv[])
     });
     
     Widget w;
+    
+    // Widget 创建后再次应用字体，确保所有控件都使用正确的字体
+    applyFont(settings->fontFamily(), settings->fontSize());
+    
     w.show();
 
     return a.exec();

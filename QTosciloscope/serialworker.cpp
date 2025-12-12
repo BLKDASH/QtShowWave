@@ -133,11 +133,11 @@ void SerialWorker::doStart()
     connect(m_serial, &QSerialPort::errorOccurred, this, &SerialWorker::onSerialError);
 
     // 尝试打开串口
+    // 注意：open() 失败时 Qt 会自动触发 errorOccurred 信号，
+    // 所以这里不需要手动 emit，只需清理资源
     if (!m_serial->open(QIODevice::ReadWrite)) {
-        QString error = QStringLiteral("Failed to open serial port: %1").arg(m_serial->errorString());
         delete m_serial;
         m_serial = nullptr;
-        emit errorOccurred(error);
         return;
     }
 
