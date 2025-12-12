@@ -59,6 +59,7 @@ private:
     void appendToDisplay(const QString &text);
     void showSystemMessage(const QString &message);
     SerialConfig buildConfig() const;
+    void applyDarkMode(bool enabled);
 
     Ui::Widget *ui;
     SerialWorker *m_worker;

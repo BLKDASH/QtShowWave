@@ -24,7 +24,7 @@
 Widget::Widget(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::Widget)
-    , m_worker(new SerialWorker(this))
+    , m_worker(new SerialWorker())
     , m_processor(new DataProcessor(this))
     , m_buffer(new DataBuffer(65536, this))
     , m_refreshTimer(new QTimer(this))
@@ -90,6 +90,12 @@ Widget::Widget(QWidget *parent)
         ui->cbPortName->setCurrentText(lastPort);
     }
 
+    // Connect dark mode signal and apply initial dark mode setting
+    // Requirements: 3.3
+    connect(settings, &AppSettings::darkModeEnabledChanged,
+            this, &Widget::applyDarkMode);
+    applyDarkMode(settings->darkModeEnabled());
+
     m_refreshTimer->setTimerType(Qt::PreciseTimer);
     m_refreshTimer->setInterval(REFRESH_INTERVAL_MS);
 }
@@ -100,6 +106,7 @@ Widget::~Widget()
     if (m_worker->isRunning()) {
         m_worker->stop();
     }
+    delete m_worker;
     delete ui;
 }
 
@@ -190,6 +197,58 @@ SerialConfig Widget::buildConfig() const
     config.readBufferSize = 4096;
 
     return config;
+}
+
+/**
+ * @brief 应用深色模式样式
+ * 
+ * 根据启用状态应用或清除深色模式样式表。
+ * Requirements: 2.1, 2.2, 2.3, 2.4, 4.1, 4.2, 4.3, 4.4
+ * 
+ * @param enabled true 启用深色模式，false 恢复默认样式
+ */
+void Widget::applyDarkMode(bool enabled)
+{
+    if (enabled) {
+        // 深色模式样式表 - 只修改颜色而不改变控件形状
+        const QString darkStyleSheet = R"(
+            QWidget {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            QGroupBox {
+                background-color: rgba(43, 43, 43, 0);
+                color: #ffffff;
+            }
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+            QLineEdit, QComboBox, QSpinBox {
+                background-color: #383838;
+                color: #ffffff;
+            }
+            QPlainTextEdit, QTextEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+            }
+            QCheckBox, QLabel {
+                color: #ffffff;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #383838;
+                color: #ffffff;
+                selection-background-color: #4d4d4d;
+            }
+        )";
+        setStyleSheet(darkStyleSheet);
+    } else {
+        // 清除样式表，恢复系统默认样式
+        setStyleSheet(QString());
+    }
 }
 
 /**
@@ -460,7 +519,7 @@ void Widget::on_openSetButton_clicked()
 {
     QDialog *settingsDialog = new QDialog(this);
     settingsDialog->setWindowTitle("设置");
-    settingsDialog->setFixedSize(320, 250);
+    settingsDialog->setFixedSize(320, 280);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(settingsDialog);
     mainLayout->setSpacing(15);
@@ -473,6 +532,7 @@ void Widget::on_openSetButton_clicked()
     encodingCombo->addItem("ANSI", AppSettings::ANSI);
     encodingCombo->addItem("UTF-8", AppSettings::UTF8);
     encodingCombo->addItem("GBK", AppSettings::GBK);
+    encodingCombo->setFixedHeight(28);
     encodingLayout->addWidget(encodingLabel);
     encodingLayout->addWidget(encodingCombo);
     encodingLayout->addStretch();
@@ -484,6 +544,7 @@ void Widget::on_openSetButton_clicked()
     QSpinBox *fontSizeSpinBox = new QSpinBox(settingsDialog);
     fontSizeSpinBox->setRange(6, 24);
     fontSizeSpinBox->setValue(9);
+    fontSizeSpinBox->setFixedHeight(28);
     fontSizeLayout->addWidget(fontSizeLabel);
     fontSizeLayout->addWidget(fontSizeSpinBox);
     fontSizeLayout->addStretch();
@@ -496,6 +557,10 @@ void Widget::on_openSetButton_clicked()
     // Keyword highlight checkbox - Requirements: 3.1
     QCheckBox *keywordHighlightCheck = new QCheckBox("高亮接收区关键词", settingsDialog);
     mainLayout->addWidget(keywordHighlightCheck);
+
+    // Dark mode checkbox - Requirements: 1.1, 1.2, 1.3, 1.4
+    QCheckBox *darkModeCheck = new QCheckBox("深色模式", settingsDialog);
+    mainLayout->addWidget(darkModeCheck);
 
     mainLayout->addStretch();
 
@@ -522,14 +587,16 @@ void Widget::on_openSetButton_clicked()
     fontSizeSpinBox->setValue(settings->fontSize());
     hexNewlineCheck->setChecked(settings->hexNewlineEnabled());
     keywordHighlightCheck->setChecked(settings->keywordHighlightEnabled());
+    darkModeCheck->setChecked(settings->darkModeEnabled());
 
-    // Connect confirm button to save settings and close dialog - Requirements: 4.3
+    // Connect confirm button to save settings and close dialog - Requirements: 4.3, 1.3, 1.4
     QObject::connect(confirmButton, &QPushButton::clicked, settingsDialog, [=]() {
         AppSettings *settings = AppSettings::instance();
         settings->setEncoding(static_cast<AppSettings::Encoding>(encodingCombo->currentData().toInt()));
         settings->setFontSize(fontSizeSpinBox->value());
         settings->setHexNewlineEnabled(hexNewlineCheck->isChecked());
         settings->setKeywordHighlightEnabled(keywordHighlightCheck->isChecked());
+        settings->setDarkModeEnabled(darkModeCheck->isChecked());
         settingsDialog->accept();
     });
 

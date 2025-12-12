@@ -19,6 +19,7 @@ public:
     bool keywordHighlightEnabled() const;
     int fontSize() const;
     QString lastPortName() const;
+    bool darkModeEnabled() const;
 
     // Setters
     void setEncoding(Encoding encoding);
@@ -26,12 +27,14 @@ public:
     void setKeywordHighlightEnabled(bool enabled);
     void setFontSize(int size);
     void setLastPortName(const QString &portName);
+    void setDarkModeEnabled(bool enabled);
 
 signals:
     void encodingChanged(AppSettings::Encoding encoding);
     void hexNewlineEnabledChanged(bool enabled);
     void keywordHighlightEnabledChanged(bool enabled);
     void fontSizeChanged(int size);
+    void darkModeEnabledChanged(bool enabled);
 
 private:
     explicit AppSettings(QObject *parent = nullptr);
@@ -46,6 +49,7 @@ private:
     bool m_keywordHighlightEnabled = true;
     int m_fontSize = 9;
     QString m_lastPortName;
+    bool m_darkModeEnabled = false;
 };
 
 #endif // APPSETTINGS_H

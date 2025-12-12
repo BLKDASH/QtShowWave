@@ -9,6 +9,7 @@ AppSettings::AppSettings(QObject *parent)
     , m_hexNewlineEnabled(true)
     , m_keywordHighlightEnabled(true)
     , m_fontSize(9)
+    , m_darkModeEnabled(false)
 {
     loadSettings();
 }
@@ -28,6 +29,7 @@ void AppSettings::loadSettings()
     m_keywordHighlightEnabled = m_settings->value("keywordHighlightEnabled", true).toBool();
     m_fontSize = m_settings->value("fontSize", 9).toInt();
     m_lastPortName = m_settings->value("lastPortName", "").toString();
+    m_darkModeEnabled = m_settings->value("darkModeEnabled", false).toBool();
 }
 
 void AppSettings::saveSettings()
@@ -37,6 +39,7 @@ void AppSettings::saveSettings()
     m_settings->setValue("keywordHighlightEnabled", m_keywordHighlightEnabled);
     m_settings->setValue("fontSize", m_fontSize);
     m_settings->setValue("lastPortName", m_lastPortName);
+    m_settings->setValue("darkModeEnabled", m_darkModeEnabled);
     m_settings->sync();
 }
 
@@ -108,5 +111,19 @@ void AppSettings::setLastPortName(const QString &portName)
     if (m_lastPortName != portName) {
         m_lastPortName = portName;
         saveSettings();
+    }
+}
+
+bool AppSettings::darkModeEnabled() const
+{
+    return m_darkModeEnabled;
+}
+
+void AppSettings::setDarkModeEnabled(bool enabled)
+{
+    if (m_darkModeEnabled != enabled) {
+        m_darkModeEnabled = enabled;
+        saveSettings();
+        emit darkModeEnabledChanged(m_darkModeEnabled);
     }
 }
