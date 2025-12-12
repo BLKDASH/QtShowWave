@@ -8,7 +8,7 @@ AppSettings::AppSettings(QObject *parent)
     , m_encoding(ANSI)
     , m_hexNewlineEnabled(true)
     , m_keywordHighlightEnabled(true)
-    , m_fontSize(9)
+    , m_fontSize(10)
     , m_darkModeEnabled(false)
 {
     loadSettings();
@@ -27,9 +27,12 @@ void AppSettings::loadSettings()
     m_encoding = static_cast<Encoding>(m_settings->value("encoding", ANSI).toInt());
     m_hexNewlineEnabled = m_settings->value("hexNewlineEnabled", true).toBool();
     m_keywordHighlightEnabled = m_settings->value("keywordHighlightEnabled", true).toBool();
-    m_fontSize = m_settings->value("fontSize", 9).toInt();
+    m_fontSize = m_settings->value("fontSize", 10).toInt();
+    m_fontFamily = m_settings->value("fontFamily", "HarmonyOS Sans SC").toString();
     m_lastPortName = m_settings->value("lastPortName", "").toString();
     m_darkModeEnabled = m_settings->value("darkModeEnabled", false).toBool();
+    m_windowSize = m_settings->value("windowSize", QSize()).toSize();
+    m_splitterState = m_settings->value("splitterState", QByteArray()).toByteArray();
 }
 
 void AppSettings::saveSettings()
@@ -38,8 +41,11 @@ void AppSettings::saveSettings()
     m_settings->setValue("hexNewlineEnabled", m_hexNewlineEnabled);
     m_settings->setValue("keywordHighlightEnabled", m_keywordHighlightEnabled);
     m_settings->setValue("fontSize", m_fontSize);
+    m_settings->setValue("fontFamily", m_fontFamily);
     m_settings->setValue("lastPortName", m_lastPortName);
     m_settings->setValue("darkModeEnabled", m_darkModeEnabled);
+    m_settings->setValue("windowSize", m_windowSize);
+    m_settings->setValue("splitterState", m_splitterState);
     m_settings->sync();
 }
 
@@ -114,6 +120,20 @@ void AppSettings::setLastPortName(const QString &portName)
     }
 }
 
+QString AppSettings::fontFamily() const
+{
+    return m_fontFamily;
+}
+
+void AppSettings::setFontFamily(const QString &family)
+{
+    if (m_fontFamily != family) {
+        m_fontFamily = family;
+        saveSettings();
+        emit fontFamilyChanged(m_fontFamily);
+    }
+}
+
 bool AppSettings::darkModeEnabled() const
 {
     return m_darkModeEnabled;
@@ -125,5 +145,31 @@ void AppSettings::setDarkModeEnabled(bool enabled)
         m_darkModeEnabled = enabled;
         saveSettings();
         emit darkModeEnabledChanged(m_darkModeEnabled);
+    }
+}
+
+QSize AppSettings::windowSize() const
+{
+    return m_windowSize;
+}
+
+void AppSettings::setWindowSize(const QSize &size)
+{
+    if (m_windowSize != size) {
+        m_windowSize = size;
+        saveSettings();
+    }
+}
+
+QByteArray AppSettings::splitterState() const
+{
+    return m_splitterState;
+}
+
+void AppSettings::setSplitterState(const QByteArray &state)
+{
+    if (m_splitterState != state) {
+        m_splitterState = state;
+        saveSettings();
     }
 }

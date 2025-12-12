@@ -41,6 +41,11 @@ Widget::Widget(QWidget *parent)
     QList<int> sizes;
     sizes << 30000 << 50000;
     ui->splitter->setSizes(sizes);
+    
+    // 设置 stretch factor: 左边(索引0)不拉伸，右边(索引1)拉伸
+    // 这样拖动窗口边框时，只有右边区域会变化
+    ui->splitter->setStretchFactor(0, 0);
+    ui->splitter->setStretchFactor(1, 1);
 
     updatePortList();
     setupConnections();
@@ -104,10 +109,25 @@ Widget::Widget(QWidget *parent)
 
     m_refreshTimer->setTimerType(Qt::PreciseTimer);
     m_refreshTimer->setInterval(REFRESH_INTERVAL_MS);
+
+    // Restore window size and splitter state from settings
+    QSize savedSize = settings->windowSize();
+    if (savedSize.isValid()) {
+        resize(savedSize);
+    }
+    QByteArray splitterState = settings->splitterState();
+    if (!splitterState.isEmpty()) {
+        ui->splitter->restoreState(splitterState);
+    }
 }
 
 Widget::~Widget()
 {
+    // Save window size and splitter state before closing
+    AppSettings *settings = AppSettings::instance();
+    settings->setWindowSize(size());
+    settings->setSplitterState(ui->splitter->saveState());
+
     m_refreshTimer->stop();
     if (m_worker->isRunning()) {
         m_worker->stop();
@@ -241,14 +261,13 @@ SerialConfig Widget::buildConfig() const
 void Widget::applyDarkMode(bool enabled)
 {
     if (enabled) {
-        // 深色模式样式表 - 只修改颜色而不改变控件形状
+        // 深色模式样式表 - 仅修改颜色，不改变任何边距和布局
         const QString darkStyleSheet = R"(
             QWidget {
                 background-color: #2b2b2b;
                 color: #ffffff;
             }
             QGroupBox {
-                background-color: rgba(43, 43, 43, 0);
                 color: #ffffff;
             }
             QPushButton {
@@ -273,6 +292,12 @@ void Widget::applyDarkMode(bool enabled)
                 background-color: #383838;
                 color: #ffffff;
                 selection-background-color: #4d4d4d;
+            }
+            QScrollBar:vertical {
+                background-color: #2b2b2b;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #555555;
             }
         )";
         setStyleSheet(darkStyleSheet);
@@ -548,7 +573,7 @@ void Widget::on_openSetButton_clicked()
 {
     QDialog *settingsDialog = new QDialog(this);
     settingsDialog->setWindowTitle("设置");
-    settingsDialog->setFixedSize(320, 280);
+    settingsDialog->setFixedSize(320, 330);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(settingsDialog);
     mainLayout->setSpacing(15);
@@ -578,6 +603,20 @@ void Widget::on_openSetButton_clicked()
     fontSizeLayout->addWidget(fontSizeSpinBox);
     fontSizeLayout->addStretch();
     mainLayout->addLayout(fontSizeLayout);
+
+    // Font family selection - Requirements: 6.1
+    QHBoxLayout *fontFamilyLayout = new QHBoxLayout();
+    QLabel *fontFamilyLabel = new QLabel("字体选择:", settingsDialog);
+    QComboBox *fontFamilyCombo = new QComboBox(settingsDialog);
+    fontFamilyCombo->addItem("系统默认");
+    fontFamilyCombo->addItem("HarmonyOS Sans SC");
+    fontFamilyCombo->addItem("Alibaba PuHuiTi");
+    fontFamilyCombo->addItem("MiSans");
+    fontFamilyCombo->setFixedHeight(28);
+    fontFamilyLayout->addWidget(fontFamilyLabel);
+    fontFamilyLayout->addWidget(fontFamilyCombo);
+    fontFamilyLayout->addStretch();
+    mainLayout->addLayout(fontFamilyLayout);
 
     // Hex newline checkbox - Requirements: 2.1
     QCheckBox *hexNewlineCheck = new QCheckBox("16进制显示模式下 0A 0D 换行", settingsDialog);
@@ -610,19 +649,21 @@ void Widget::on_openSetButton_clicked()
     copyrightLabel->setFont(copyrightFont);
     mainLayout->addWidget(copyrightLabel);
 
-    // Load current values from AppSettings - Requirements: 4.2
+    // Load current values from AppSettings - Requirements: 4.2, 6.1
     AppSettings *settings = AppSettings::instance();
     encodingCombo->setCurrentIndex(encodingCombo->findData(settings->encoding()));
     fontSizeSpinBox->setValue(settings->fontSize());
+    fontFamilyCombo->setCurrentText(settings->fontFamily());
     hexNewlineCheck->setChecked(settings->hexNewlineEnabled());
     keywordHighlightCheck->setChecked(settings->keywordHighlightEnabled());
     darkModeCheck->setChecked(settings->darkModeEnabled());
 
-    // Connect confirm button to save settings and close dialog - Requirements: 4.3, 1.3, 1.4
+    // Connect confirm button to save settings and close dialog - Requirements: 4.3, 1.3, 1.4, 6.2
     QObject::connect(confirmButton, &QPushButton::clicked, settingsDialog, [=]() {
         AppSettings *settings = AppSettings::instance();
         settings->setEncoding(static_cast<AppSettings::Encoding>(encodingCombo->currentData().toInt()));
         settings->setFontSize(fontSizeSpinBox->value());
+        settings->setFontFamily(fontFamilyCombo->currentText());
         settings->setHexNewlineEnabled(hexNewlineCheck->isChecked());
         settings->setKeywordHighlightEnabled(keywordHighlightCheck->isChecked());
         settings->setDarkModeEnabled(darkModeCheck->isChecked());

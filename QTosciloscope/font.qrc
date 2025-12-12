@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/new/prefix1">
         <file>recf/HarmonyOS_Sans_SC_Regular.ttf</file>
+        <file>recf/MiSans-Normal.ttf</file>
+        <file>recf/AlibabaPuHuiTi-3-45-Light.ttf</file>
     </qresource>
 </RCC>
