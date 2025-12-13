@@ -4,7 +4,7 @@ AppSettings* AppSettings::s_instance = nullptr;
 
 AppSettings::AppSettings(QObject *parent)
     : QObject(parent)
-    , m_settings(new QSettings("QTosciloscope", "Settings", this))
+    , m_settings(new QSettings("settings.ini", QSettings::IniFormat, this))
     , m_encoding(ANSI)
     , m_hexNewlineEnabled(true)
     , m_keywordHighlightEnabled(true)
@@ -28,7 +28,7 @@ void AppSettings::loadSettings()
     m_hexNewlineEnabled = m_settings->value("hexNewlineEnabled", true).toBool();
     m_keywordHighlightEnabled = m_settings->value("keywordHighlightEnabled", true).toBool();
     m_fontSize = m_settings->value("fontSize", 10).toInt();
-    m_fontFamily = m_settings->value("fontFamily", "HarmonyOS Sans SC").toString();
+    m_fontFamily = m_settings->value("fontFamily", "Default").toString();
     m_lastPortName = m_settings->value("lastPortName", "").toString();
     m_darkModeEnabled = m_settings->value("darkModeEnabled", false).toBool();
     m_windowSize = m_settings->value("windowSize", QSize()).toSize();

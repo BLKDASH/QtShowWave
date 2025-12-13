@@ -36,17 +36,17 @@ void loadAllEmbeddedFonts() {
     }
 }
 
-// 保存系统默认字体
+// 保存Default字体
 static QFont g_systemDefaultFont;
 
 // 应用字体设置
 void applyFont(const QString &displayName, int fontSize) {
     QFont customFont;
-    if (displayName == "系统默认") {
-        // 使用系统默认字体
+    if (displayName == "Default") {
+        // 使用Default字体
         customFont = g_systemDefaultFont;
         customFont.setPointSize(fontSize);
-        // qDebug() << "应用系统默认字体:" << customFont.family() << "大小:" << fontSize;
+        // qDebug() << "应用Default字体:" << customFont.family() << "大小:" << fontSize;
     } else {
         QString actualFamily = g_fontFamilyMap.value(displayName, displayName);
         customFont = QFont(actualFamily, fontSize);
@@ -68,16 +68,16 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     
-    // 保存系统默认字体（在加载任何自定义字体之前）
+    // 保存Default字体（在加载任何自定义字体之前）
     g_systemDefaultFont = QApplication::font();
     
     // 加载所有嵌入字体
     loadAllEmbeddedFonts();
     
-    // 从设置中获取字体配置并应用
+    // 从设置中获取字体配置
     AppSettings *settings = AppSettings::instance();
     // qDebug() << "启动时读取设置 - 字体:" << settings->fontFamily() << "大小:" << settings->fontSize();
-    applyFont(settings->fontFamily(), settings->fontSize());
+    // applyFont(settings->fontFamily(), settings->fontSize());
     
     // 连接字体变更信号
     QObject::connect(settings, &AppSettings::fontFamilyChanged, [settings](const QString &family) {
@@ -87,12 +87,13 @@ int main(int argc, char *argv[])
         applyFont(settings->fontFamily(), size);
     });
     
-    Widget w;
+    Widget mainWindow;
     
     // Widget 创建后再次应用字体，确保所有控件都使用正确的字体
     applyFont(settings->fontFamily(), settings->fontSize());
     
-    w.show();
+    mainWindow.show();
+
 
     return a.exec();
 }

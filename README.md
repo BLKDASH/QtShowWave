@@ -27,7 +27,7 @@
 ### 界面设置
 - 深色模式
 - 字体大小调节（6-24pt）
-- 多字体选择（系统默认 / HarmonyOS Sans SC / Alibaba PuHuiTi / MiSans）
+- 多字体选择（Default / HarmonyOS Sans SC / Alibaba PuHuiTi / MiSans）
 - 窗口大小与分割条位置记忆
 - 设置自动持久化
 
@@ -47,8 +47,9 @@ make
 或使用 Qt Creator 打开 `SSW.pro` 直接构建。
 
 ## 下载
-
 预编译版本：`SSW_SerialHelper_Win_x64_vX_X_X_Portable.zip`
+### 安装与打开方式
+无需安装，解压并直接打开exe后缀的文件
 
 ## 截图
 

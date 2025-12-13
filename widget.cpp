@@ -42,10 +42,7 @@ Widget::Widget(QWidget *parent)
     sizes << 30000 << 50000;
     ui->splitter->setSizes(sizes);
     
-    // 设置 stretch factor: 左边(索引0)不拉伸，右边(索引1)拉伸
-    // 这样拖动窗口边框时，只有右边区域会变化
-    ui->splitter->setStretchFactor(0, 0);
-    ui->splitter->setStretchFactor(1, 1);
+
 
     updatePortList();
     setupConnections();
@@ -140,7 +137,7 @@ Widget::Widget(QWidget *parent)
     ui->chkClearAfterSend->setChecked(settings->clearAfterSendEnabled());
     ui->chk0x16Send->setChecked(settings->hexSendEnabled());
     ui->chkNewLine->setChecked(settings->newLineEnabled());
-    
+
     // Connect signals to save settings when changed
     connect(ui->cbBaudRate, &QComboBox::currentTextChanged, settings, &AppSettings::setBaudRate);
     connect(ui->cbStopBits, QOverload<int>::of(&QComboBox::currentIndexChanged), settings, &AppSettings::setStopBitsIndex);
@@ -338,7 +335,7 @@ void Widget::applyDarkMode(bool enabled)
         )";
         setStyleSheet(darkStyleSheet);
     } else {
-        // 清除样式表，恢复系统默认样式
+        // 清除样式表，恢复样式
         setStyleSheet(QString());
     }
 }
@@ -685,7 +682,7 @@ void Widget::on_openSetButton_clicked()
     QHBoxLayout *fontFamilyLayout = new QHBoxLayout();
     QLabel *fontFamilyLabel = new QLabel("字体选择:", settingsDialog);
     QComboBox *fontFamilyCombo = new QComboBox(settingsDialog);
-    fontFamilyCombo->addItem("系统默认");
+    fontFamilyCombo->addItem("Default");
     fontFamilyCombo->addItem("HarmonyOS Sans SC");
     fontFamilyCombo->addItem("Alibaba PuHuiTi");
     fontFamilyCombo->addItem("MiSans");
