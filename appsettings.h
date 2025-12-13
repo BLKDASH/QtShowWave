@@ -82,7 +82,7 @@ private:
     bool m_hexNewlineEnabled = true;
     bool m_keywordHighlightEnabled = true;
     int m_fontSize = 10;
-    QString m_fontFamily = "HarmonyOS Sans SC";
+    QString m_fontFamily = "Default";
     QString m_lastPortName;
     bool m_darkModeEnabled = false;
     QSize m_windowSize;

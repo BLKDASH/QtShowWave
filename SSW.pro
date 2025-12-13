@@ -4,9 +4,9 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
 CONFIG += c++17
 
-TARGET = SSW_SerialHelper
+TARGET = SSWCOM
 
-VERSION = 2.1.0
+VERSION = 2.1.1
 
 SOURCES += \
     appsettings.cpp \

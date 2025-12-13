@@ -27,7 +27,7 @@
 ### 界面设置
 - 深色模式
 - 字体大小调节（6-24pt）
-- 多字体选择（系统默认 / HarmonyOS Sans SC / Alibaba PuHuiTi / MiSans）
+- 多字体选择（Default / HarmonyOS Sans SC / Alibaba PuHuiTi / MiSans）
 - 窗口大小与分割条位置记忆
 - 设置自动持久化
 
